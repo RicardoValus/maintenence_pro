@@ -20,7 +20,7 @@ Ordem que roda:
 
 **4. Microcode e firmware**
 - Detecta se é CPU AMD ou Intel e confere se o pacote de microcode (`amd64-microcode` no teu caso) está atualizado.
-- Se tiver `fwupd` instalado, confere atualização de firmware de chipset/BIOS (só avisa, não aplica sozinho).
+- Se tiver `fwupd` instalado, aplica automaticamente o UEFI dbx (Secure Boot). Firmware de hardware/BIOS só avisa, não aplica sozinho.
 
 **5. Relatório final**
 - Junta tudo isso e decide: se algo que exige reboot mudou (kernel novo, driver NVIDIA atualizado, microcode, DKMS recompilado, nouveau ainda carregado, link GLX recriado) → manda reiniciar e explica o motivo. Se não → confirma "tudo OK, não precisa reiniciar".

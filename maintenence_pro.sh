@@ -21,6 +21,45 @@ append_reboot() {
 append_warn() {
     WARNINGS="${WARNINGS}${WARNINGS:+ | }$1"
 }
+apply_uefi_dbx() {
+    sudo fwupdmgr refresh --force &> /dev/null
+    local json parsed ids other id
+    json=$(sudo fwupdmgr get-updates --json 2>/dev/null)
+    parsed=$(printf '%s' "$json" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+ids, other = [], 0
+for x in d.get("Devices") or []:
+    is_dbx = x.get("Plugin")=="uefi_dbx" or (x.get("Name") or "").lower()=="uefi dbx"
+    if is_dbx and x.get("DeviceId"):
+        ids.append(x["DeviceId"])
+    elif not is_dbx:
+        other += 1
+print(" ".join(ids))
+print(other)
+' 2>/dev/null)
+    ids=$(printf '%s\n' "$parsed" | sed -n '1p')
+    other=$(printf '%s\n' "$parsed" | sed -n '2p')
+    case "$other" in ''|*[!0-9]*) other=0 ;; esac
+    if [ -n "$ids" ]; then
+        echo "🔐 Aplicando UEFI dbx (Secure Boot)..."
+        for id in $ids; do
+            sudo fwupdmgr update "$id" -y --no-reboot-check
+        done
+        append_reboot "UEFI dbx (Secure Boot) atualizado"
+    fi
+    if [ "$other" -gt 0 ]; then
+        FW_STATE="available"
+        echo "⚠️  Firmware de hardware disponível (BIOS não é aplicada automaticamente). Rode: sudo fwupdmgr update"
+        sudo fwupdmgr get-updates 2>&1
+        append_warn "firmware: atualizações além do dbx (não aplicadas)"
+    elif [ -n "$ids" ]; then
+        FW_STATE="upgraded"
+        echo "✅ UEFI dbx aplicado. Chipset/BIOS sem outras atualizações."
+    else
+        FW_STATE="ok"
+        echo "✅ Firmware do sistema (chipset/BIOS) atualizado."
+    fi
+}
 fetch_nvidia_unix_versions() {
     NV_PROD=""
     NV_NFB=""
@@ -181,17 +220,7 @@ fi
 
 echo "🔌 Verificando firmware de chipset/placa-mãe (fwupd)..."
 if command -v fwupdmgr &> /dev/null; then
-    sudo fwupdmgr refresh --force &> /dev/null
-    FWUPD_OUT=$(sudo fwupdmgr get-updates 2>&1)
-    if echo "$FWUPD_OUT" | grep -qi "no updatable devices\|no updates available"; then
-        FW_STATE="ok"
-        echo "✅ Firmware do sistema (chipset/BIOS) atualizado."
-    else
-        FW_STATE="available"
-        echo "⚠️  Atualizações de firmware disponíveis. Rode: sudo fwupdmgr update"
-        echo "$FWUPD_OUT"
-        append_warn "firmware: atualizações disponíveis (não aplicadas)"
-    fi
+    apply_uefi_dbx
 else
     FW_STATE="missing"
     echo "ℹ️  fwupd não instalado. Instale com: sudo apt install fwupd (necessário pra checar firmware de chipset/BIOS)"
