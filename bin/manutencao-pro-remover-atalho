@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+
+import sys
+
+from manutencao_pro.keybind import remove_shortcut
+
+if __name__ == "__main__":
+    sys.exit(remove_shortcut())

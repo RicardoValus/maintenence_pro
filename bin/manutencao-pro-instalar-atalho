@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+
+import sys
+
+from manutencao_pro.keybind import install_shortcut
+
+if __name__ == "__main__":
+    sys.exit(install_shortcut())

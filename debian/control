@@ -1,0 +1,16 @@
+Source: manutencao-pro
+Section: admin
+Priority: optional
+Maintainer: Ricardo Medlo Valus <RicardoValus@gmail.com>
+Build-Depends: debhelper-compat (= 13), dh-python, meson, ninja-build, python3, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: manutencao-pro
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, polkitd, pkexec, libglib2.0-bin
+Recommends: fwupd, mesa-utils
+Description: manutenção diária do Debian com interface gráfica
+ Aplicativo em GTK 4 e libadwaita para a manutenção diária do sistema:
+ atualização de pacotes, DKMS, microcode, firmware e driver NVIDIA.
+ O script de terminal continua funcionando sozinho.

@@ -1,0 +1,17 @@
+manutencao-pro (1.0.2) unstable; urgency=medium
+
+  * Ajusta a tela de resultado: check do tema e botões sempre visíveis.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Mon, 28 Sep 2026 16:30:00 -0300
+
+manutencao-pro (1.0.1) unstable; urgency=medium
+
+  * Corrige a sessão gráfica na checagem GLX.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Mon, 28 Sep 2026 16:25:00 -0300
+
+manutencao-pro (1.0.0) unstable; urgency=medium
+
+  * Versão inicial da interface de manutenção diária.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Mon, 28 Sep 2026 15:10:00 -0300

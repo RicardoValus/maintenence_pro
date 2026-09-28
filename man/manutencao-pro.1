@@ -1,0 +1,31 @@
+.TH MANUTENCAO-PRO 1 "setembro de 2026" "1.0.2" "Manutenção Pro"
+.SH NOME
+manutencao-pro \- manutenção diária do Debian
+.SH SINOPSE
+.B manutencao-pro
+[\fB\-\-demo\fR]
+[\fB\-\-scenario\fR \fICENÁRIO\fR]
+[\fB\-\-run\fR]
+.SH DESCRIÇÃO
+Interface gráfica para a manutenção diária: pacotes, DKMS, microcode, firmware e driver NVIDIA.
+A execução real pede autorização pelo polkit e roda uma cópia do script em /usr/libexec.
+.SH OPÇÕES
+.TP
+.B \-\-demo
+Abre o modo demonstração, sem alterar o sistema.
+.TP
+.B \-\-scenario CENÁRIO
+Cenário da demonstração: ok, warnings, reboot ou fail.
+.TP
+.B \-\-run
+Inicia a manutenção assim que a janela abre.
+.SH ARQUIVOS
+.TP
+.B /usr/libexec/manutencao-pro/wrapper
+Programa autorizado pelo polkit.
+.TP
+.B $XDG_STATE_HOME/manutencao-pro/history.json
+Histórico das últimas execuções.
+.SH VEJA TAMBÉM
+.BR manutencao-pro-instalar-atalho (1),
+.BR manutencao-pro-remover-atalho (1)

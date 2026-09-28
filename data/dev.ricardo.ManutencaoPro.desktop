@@ -1,0 +1,17 @@
+[Desktop Entry]
+Name=Manutenção Pro
+Comment=Manutenção diária do sistema
+Exec=manutencao-pro
+Icon=dev.ricardo.ManutencaoPro
+Terminal=false
+Type=Application
+Categories=System;
+Keywords=manutenção;atualização;apt;firmware;nvidia;dkms;sistema;
+StartupNotify=true
+StartupWMClass=dev.ricardo.ManutencaoPro
+DBusActivatable=false
+Actions=run-now;
+
+[Desktop Action run-now]
+Name=Executar agora
+Exec=manutencao-pro --run

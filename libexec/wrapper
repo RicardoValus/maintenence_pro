@@ -1,0 +1,200 @@
+#!/bin/bash
+set -u
+
+SCRIPT="/usr/libexec/manutencao-pro/maintenence_pro.sh"
+
+die() {
+    printf '%s\n' "$1" >&2
+    exit 2
+}
+
+display=""
+xauthority=""
+wayland=""
+cancel_fifo=""
+saved_args=("$@")
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --display)
+            [ "$#" -ge 2 ] || die "parâmetro sem valor"
+            [ -z "$display" ] || die "parâmetro duplicado"
+            display=$2
+            shift 2
+            ;;
+        --xauthority)
+            [ "$#" -ge 2 ] || die "parâmetro sem valor"
+            [ -z "$xauthority" ] || die "parâmetro duplicado"
+            xauthority=$2
+            shift 2
+            ;;
+        --wayland-display)
+            [ "$#" -ge 2 ] || die "parâmetro sem valor"
+            [ -z "$wayland" ] || die "parâmetro duplicado"
+            wayland=$2
+            shift 2
+            ;;
+        --cancel-fifo)
+            [ "$#" -ge 2 ] || die "parâmetro sem valor"
+            [ -z "$cancel_fifo" ] || die "parâmetro duplicado"
+            cancel_fifo=$2
+            shift 2
+            ;;
+        *)
+            die "parâmetro não permitido"
+            ;;
+    esac
+done
+
+if [ -n "$display" ]; then
+    [[ "$display" =~ ^:[0-9]{1,4}(\.[0-9]{1,2})?$ ]] || die "DISPLAY inválido"
+fi
+if [ -n "$wayland" ]; then
+    [[ "$wayland" =~ ^wayland-[0-9]{1,4}$ ]] || die "WAYLAND_DISPLAY inválido"
+fi
+if [ -n "$xauthority" ]; then
+    uid=${PKEXEC_UID:-}
+    [[ "$uid" =~ ^[0-9]+$ ]] || die "XAUTHORITY inválido"
+    [[ "$xauthority" != *..* ]] || die "XAUTHORITY inválido"
+    home_ok=0
+    run_ok=0
+    [[ "$xauthority" =~ ^/home/[A-Za-z0-9._-]+/\.Xauthority$ ]] && home_ok=1
+    [[ "$xauthority" =~ ^/run/user/${uid}/[A-Za-z0-9._@+/-]+$ ]] && run_ok=1
+    [ "$home_ok" -eq 1 ] || [ "$run_ok" -eq 1 ] || die "XAUTHORITY inválido"
+    [ -f "$xauthority" ] && [ ! -L "$xauthority" ] || die "XAUTHORITY inválido"
+    owner=$(stat -c '%u' -- "$xauthority")
+    size=$(stat -c '%s' -- "$xauthority")
+    [ "$owner" = "$uid" ] || die "XAUTHORITY inválido"
+    [ "$size" -le 65536 ] || die "XAUTHORITY inválido"
+fi
+if [ -n "$cancel_fifo" ]; then
+    uid=${PKEXEC_UID:-}
+    [[ "$uid" =~ ^[0-9]+$ ]] || die "fifo inválido"
+    [[ "$cancel_fifo" =~ ^/run/user/${uid}/manutencao-pro/cancel$ ]] || die "fifo inválido"
+    [ -p "$cancel_fifo" ] && [ ! -L "$cancel_fifo" ] || die "fifo inválido"
+    owner=$(stat -c '%u' -- "$cancel_fifo")
+    mode=$(stat -c '%a' -- "$cancel_fifo")
+    [ "$owner" = "$uid" ] || die "fifo inválido"
+    [ "$mode" = "600" ] || die "fifo inválido"
+fi
+
+if [ "$(id -u)" -ne 0 ] || [ -z "${PKEXEC_UID:-}" ]; then
+    printf '%s\n' "Este wrapper só pode ser executado via pkexec." >&2
+    exit 1
+fi
+
+if [ -z "${MAINT_INNER:-}" ]; then
+    export MAINT_INNER=1
+    exec setsid --fork --wait "$0" "${saved_args[@]}"
+fi
+
+export MAINT_LEADER_PID=$$
+umask 022
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export MAINT_GUI=1
+unset DISPLAY
+unset XAUTHORITY
+unset WAYLAND_DISPLAY
+if [ -n "$display" ]; then
+    export DISPLAY="$display"
+fi
+if [ -n "$xauthority" ]; then
+    export XAUTHORITY="$xauthority"
+fi
+if [ -n "$wayland" ]; then
+    export WAYLAND_DISPLAY="$wayland"
+fi
+
+shim_dir=$(mktemp -d /tmp/manutencao-pro-sudo.XXXXXX)
+chmod 700 "$shim_dir"
+cat > "$shim_dir/sudo" << 'EOF'
+#!/bin/bash
+exec /usr/bin/sudo --preserve-env=DEBIAN_FRONTEND,NEEDRESTART_MODE "$@"
+EOF
+chmod 755 "$shim_dir/sudo"
+export PATH="${shim_dir}:/usr/sbin:/usr/bin:/sbin:/bin"
+
+write_step() {
+    python3 -c 'import os,sys
+try:
+    fd=os.open(sys.argv[1], os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW, 0o644)
+except OSError:
+    raise SystemExit(0)
+os.write(fd, (sys.argv[2]+"\n").encode())
+os.close(fd)' "$1" "$2" 2>/dev/null || true
+}
+
+step_is_apt() {
+    case "$1" in
+        apt-update|apt-upgrade|apt-autoremove|apt-clean|apt-fix) return 0 ;;
+    esac
+    return 1
+}
+
+current_step() {
+    if [ -n "${MAINT_STEP_FILE:-}" ] && [ -f "$MAINT_STEP_FILE" ] && [ ! -L "$MAINT_STEP_FILE" ]; then
+        head -n 1 -- "$MAINT_STEP_FILE" 2>/dev/null || true
+        return 0
+    fi
+    printf '%s\n' "apt-update"
+}
+
+terminate_group() {
+    trap - TERM
+    local self pgid pid group
+    self=$MAINT_LEADER_PID
+    pgid=$(ps -o pgid= -p "$self" | tr -d ' ')
+    if [ -n "$pgid" ]; then
+        while read -r pid group; do
+            if [ -n "$pid" ] && [ "$group" = "$pgid" ] && [ "$pid" != "$self" ]; then
+                kill -TERM "$pid" 2>/dev/null || true
+            fi
+        done < <(ps -eo pid=,pgid=)
+    fi
+    exit 143
+}
+
+on_term() {
+    local step
+    step=$(current_step)
+    if step_is_apt "$step"; then
+        return 0
+    fi
+    terminate_group
+}
+
+watcher_pid=""
+cleanup() {
+    if [ -n "${watcher_pid:-}" ]; then
+        kill "$watcher_pid" 2>/dev/null || true
+        watcher_pid=""
+    fi
+    if [ -n "${shim_dir:-}" ]; then
+        rm -rf -- "$shim_dir"
+        shim_dir=""
+    fi
+}
+
+trap on_term TERM
+trap cleanup EXIT
+
+if [ -n "$cancel_fifo" ]; then
+    export MAINT_STEP_FILE="${cancel_fifo%/*}/step"
+    write_step "$MAINT_STEP_FILE" "apt-update"
+    (
+        while IFS= read -r _; do
+            step=$(current_step)
+            if step_is_apt "$step"; then
+                continue
+            fi
+            kill -TERM "$MAINT_LEADER_PID" 2>/dev/null || true
+        done < "$cancel_fifo"
+    ) &
+    watcher_pid=$!
+fi
+
+[ -f "$SCRIPT" ] || die "script de manutenção ausente"
+"$SCRIPT"
+status=$?
+exit "$status"

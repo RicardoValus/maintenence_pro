@@ -15,11 +15,51 @@ GLX_LINK_STATE="skip"
 GLX_RENDER_STATE="skip"
 REBOOT_REASONS=""
 WARNINGS=""
+MAINT_TOTAL_STEPS=14
+gui_warn() {
+    if [ "${MAINT_GUI:-}" = "1" ]; then
+        printf '%s\n' "@@WARN $1"
+    fi
+}
+gui_write_step() {
+    if [ "${MAINT_GUI:-}" != "1" ] || [ -z "${MAINT_STEP_FILE:-}" ]; then
+        return 0
+    fi
+    python3 -c 'import os,sys
+try:
+    fd=os.open(sys.argv[1], os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW, 0o644)
+except OSError:
+    raise SystemExit(0)
+os.write(fd, (sys.argv[2]+"\n").encode())
+os.close(fd)' "$MAINT_STEP_FILE" "$1" 2>/dev/null || true
+}
+gui_step() {
+    if [ "${MAINT_GUI:-}" != "1" ]; then
+        return 0
+    fi
+    printf '%s\n' "@@STEP $1/${MAINT_TOTAL_STEPS} $2 $3"
+    gui_write_step "$2"
+}
+gui_result() {
+    if [ "${MAINT_GUI:-}" = "1" ]; then
+        printf '%s\n' "@@RESULT $1=$2"
+    fi
+}
+gui_result_if_set() {
+    case "$1" in
+        ""|skip) return 0 ;;
+    esac
+    gui_result "$2" "$1"
+}
 append_reboot() {
     REBOOT_REASONS="${REBOOT_REASONS}${REBOOT_REASONS:+; }$1"
+    if [ "${MAINT_GUI:-}" = "1" ]; then
+        printf '%s\n' "@@REBOOT $1"
+    fi
 }
 append_warn() {
     WARNINGS="${WARNINGS}${WARNINGS:+ | }$1"
+    gui_warn "$1"
 }
 apply_uefi_dbx() {
     sudo fwupdmgr refresh --force &> /dev/null
@@ -126,17 +166,27 @@ print_final_report() {
     echo "📋 Conferência final"
     if [ "$APT_UPDATE_OK" = true ] && [ "$APT_UPGRADE_OK" = true ] && [ "$APT_FIX_OK" = true ]; then
         echo "✅ Pacotes: update, upgrade e dependências ok"
+        gui_result "packages" "ok"
     else
         echo "⚠️  Pacotes: houve falha no apt (update/upgrade/fix). Veja o log acima."
+        gui_result "packages" "fail"
     fi
     print_item "$DKMS_STATE" "DKMS NVIDIA"
+    gui_result_if_set "$DKMS_STATE" "dkms"
     print_item "$MC_STATE" "Microcode${MC_INSTALLED:+ ($MC_INSTALLED)}"
+    gui_result_if_set "$MC_STATE" "microcode"
     print_item "$FW_STATE" "Firmware chipset/BIOS"
+    gui_result_if_set "$FW_STATE" "firmware"
     print_item "$NV_REPO_STATE" "Driver NVIDIA no repositório${DRIVER_ATIVO:+ (ativo: $DRIVER_ATIVO)}"
+    gui_result_if_set "$NV_REPO_STATE" "nvidia_repo"
     print_item "$NV_UP_STATE" "Driver NVIDIA na NVIDIA.com"
+    gui_result_if_set "$NV_UP_STATE" "nvidia_upstream"
     print_item "$NOUVEAU_STATE" "Blacklist nouveau"
+    gui_result_if_set "$NOUVEAU_STATE" "nouveau"
     print_item "$GLX_LINK_STATE" "Link GLX"
+    gui_result_if_set "$GLX_LINK_STATE" "glx_link"
     print_item "$GLX_RENDER_STATE" "GLX renderizando com NVIDIA"
+    gui_result_if_set "$GLX_RENDER_STATE" "glx_render"
     echo ""
     if [ -n "$REBOOT_REASONS" ]; then
         echo "🔁 REINICIE O SISTEMA pra evitar problemas."
@@ -150,30 +200,49 @@ print_final_report() {
     fi
 }
 
+gui_step 1 apt-update "Atualizando lista de pacotes"
 echo "🔄 Atualizando lista de pacotes..."
 sudo apt-get update
 [ $? -eq 0 ] || APT_UPDATE_OK=false
+if [ "$APT_UPDATE_OK" = false ]; then
+    gui_warn "falha no apt update"
+fi
 
+gui_step 2 apt-upgrade "Fazendo upgrade dos pacotes"
 echo "⬆️ Fazendo upgrade dos pacotes..."
 sudo apt-get dist-upgrade -y | tee "$UPGRADE_LOG"
 [ "${PIPESTATUS[0]}" -eq 0 ] || APT_UPGRADE_OK=false
+if [ "$APT_UPGRADE_OK" = false ]; then
+    gui_warn "falha no apt upgrade"
+fi
 
+gui_step 3 apt-autoremove "Removendo pacotes desnecessários"
 echo "🧹 Removendo pacotes desnecessários..."
 sudo apt-get autoremove -y
 
+gui_step 4 apt-clean "Limpando cache de pacotes"
 echo "🧼 Limpando cache de pacotes..."
 sudo apt-get autoclean -y
 sudo apt-get clean
 
+gui_step 5 apt-fix "Verificando pacotes quebrados e dependências"
 echo "🔍 Verificando pacotes quebrados e dependências..."
 sudo apt-get --fix-broken install -y
-[ $? -eq 0 ] || APT_FIX_OK=false
+if [ $? -ne 0 ]; then
+    APT_FIX_OK=false
+    gui_warn "falha no apt --fix-broken"
+fi
 sudo dpkg --configure -a
-[ $? -eq 0 ] || APT_FIX_OK=false
+if [ $? -ne 0 ]; then
+    APT_FIX_OK=false
+    gui_warn "falha no dpkg --configure"
+fi
 
+gui_step 6 journal "Limpando logs antigos"
 echo "🧠 Limpando logs antigos (journald)..."
 sudo journalctl --vacuum-time=30d
 
+gui_step 7 dkms "Verificando módulos DKMS"
 echo "🎮 Verificando módulos DKMS (NVIDIA)..."
 DKMS_STATUS=$(sudo dkms status 2>/dev/null)
 if echo "$DKMS_STATUS" | grep -qiE "error|broken"; then
@@ -192,6 +261,7 @@ else
     DKMS_STATE="skip"
 fi
 
+gui_step 8 microcode "Verificando microcode do processador"
 echo "🧮 Verificando microcode do processador..."
 MICROCODE_PKG=""
 grep -qi "GenuineIntel" /proc/cpuinfo && MICROCODE_PKG="intel-microcode"
@@ -218,6 +288,7 @@ if [ -n "$MICROCODE_PKG" ]; then
     fi
 fi
 
+gui_step 9 firmware "Verificando firmware do chipset"
 echo "🔌 Verificando firmware de chipset/placa-mãe (fwupd)..."
 if command -v fwupdmgr &> /dev/null; then
     apply_uefi_dbx
@@ -227,6 +298,7 @@ else
     append_warn "fwupd não instalado"
 fi
 
+gui_step 10 nvidia "Verificando driver NVIDIA"
 echo "🎮 Verificando versão do driver NVIDIA..."
 if command -v nvidia-smi &> /dev/null; then
     DRIVER_ATIVO=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)
@@ -258,6 +330,7 @@ if grep -qiE "^(Inst|Conf) (nvidia-driver|nvidia-open|nvidia-kernel)" "$UPGRADE_
     append_reboot "driver NVIDIA atualizado"
 fi
 
+gui_step 11 nouveau "Verificando blacklist do nouveau"
 echo "🚫 Verificando blacklist do driver nouveau..."
 if command -v nvidia-smi &> /dev/null; then
     BLACKLIST_FILE="/etc/modprobe.d/blacklist-nouveau.conf"
@@ -279,6 +352,7 @@ if command -v nvidia-smi &> /dev/null; then
     fi
 fi
 
+gui_step 12 glx-link "Verificando link do GLX"
 echo "🔗 Verificando link simbólico do GLX da NVIDIA (libglxserver_nvidia.so)..."
 if command -v nvidia-smi &> /dev/null; then
     GLX_VERSIONED=$(find /usr/lib -iname "libglxserver_nvidia.so.*" 2>/dev/null | sort -V | tail -1)
@@ -303,6 +377,7 @@ if command -v nvidia-smi &> /dev/null; then
     fi
 fi
 
+gui_step 13 glx-render "Verificando renderização GLX"
 echo "🖥️  Verificando se o GLX está renderizando com a NVIDIA (e não caindo pro Mesa/swrast)..."
 if command -v glxinfo &> /dev/null && [ -n "$DISPLAY" ]; then
     GL_RENDERER=$(glxinfo 2>/dev/null | grep "OpenGL renderer")
@@ -325,5 +400,6 @@ if [ "$KERNEL_ANTES" != "$KERNEL_NOVO" ]; then
     append_reboot "kernel atualizado ($KERNEL_ANTES → $KERNEL_NOVO)"
 fi
 
+gui_step 14 conferencia "Conferência final"
 print_final_report
 echo "✅ Manutenção concluída!"

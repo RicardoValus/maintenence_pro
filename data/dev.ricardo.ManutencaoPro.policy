@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "https://specifications.freedesktop.org/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>Manutenção Pro</vendor>
+  <icon_name>dev.ricardo.ManutencaoPro</icon_name>
+  <action id="dev.ricardo.ManutencaoPro.run">
+    <description>Executar a manutenção do sistema</description>
+    <description xml:lang="pt-BR">Executar a manutenção do sistema</description>
+    <message>Autenticação necessária para executar a manutenção do sistema</message>
+    <message xml:lang="pt-BR">Autenticação necessária para executar a manutenção do sistema</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/manutencao-pro/wrapper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>
