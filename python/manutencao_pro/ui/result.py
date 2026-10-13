@@ -28,7 +28,7 @@ class ResultPage(Gtk.Box):
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=16, vexpand=True)
         self._generation = 0
-        self.status_icon = StatusIcon(pixel_size=28)
+        self.status_icon = StatusIcon(pixel_size=28, centered=True)
         self.status_title = Gtk.Label(halign=Gtk.Align.CENTER, justify=Gtk.Justification.CENTER, wrap=True)
         self.status_title.add_css_class("title-2")
         self.status_description = Gtk.Label(
