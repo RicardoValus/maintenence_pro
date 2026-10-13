@@ -100,28 +100,70 @@ print(other)
         echo "✅ Firmware do sistema (chipset/BIOS) atualizado."
     fi
 }
+nvidia_lookup_os_id() {
+    case "$(uname -m)" in
+        aarch64|arm64) echo 124 ;;
+        *) echo 12 ;;
+    esac
+}
+parse_nvidia_lookup() {
+    python3 -c '
+import json
+import sys
+
+def branch_version(info):
+    raw = info.get("DisplayVersion")
+    if isinstance(raw, str):
+        return raw.strip()
+    return ""
+
+try:
+    data = json.load(sys.stdin)
+except json.JSONDecodeError:
+    sys.exit(1)
+items = data.get("IDS") if isinstance(data, dict) else None
+if not isinstance(items, list):
+    sys.exit(1)
+prod = ""
+nfb = ""
+for item in items:
+    info = item.get("downloadInfo") if isinstance(item, dict) else None
+    if not isinstance(info, dict):
+        continue
+    version = branch_version(info)
+    if not version:
+        continue
+    recommended = str(info.get("IsRecommended")) == "1"
+    preview = str(info.get("IsFeaturePreview")) == "1"
+    if not prod and recommended:
+        prod = version
+    elif not nfb and preview:
+        nfb = version
+    if prod and nfb:
+        break
+if not prod and not nfb:
+    sys.exit(1)
+sys.stdout.write(prod + "\n" + nfb + "\n")
+'
+}
 fetch_nvidia_unix_versions() {
     NV_PROD=""
     NV_NFB=""
-    local raw section arch_key="Linux x86"
-    case "$(uname -m)" in
-        aarch64|arm64) arch_key="Linux aarch64" ;;
-    esac
+    local raw os_id parsed
+    os_id=$(nvidia_lookup_os_id)
+    local url="https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup&psid=120&lid=1&isWHQL=0&numberOfResults=6&sort1=1&languageCode=1033&osID=${os_id}&pfid=985"
     if command -v curl >/dev/null 2>&1; then
-        raw=$(curl -fsSL -A "Mozilla/5.0 (compatible; maintenence-pro/1.0)" --max-time 15 "https://www.nvidia.com/en-us/drivers/unix.md" 2>/dev/null) || raw=""
+        raw=$(curl -fsSL -A "Mozilla/5.0 (compatible; maintenence-pro/1.0)" --max-time 15 "$url" 2>/dev/null) || raw=""
     elif command -v wget >/dev/null 2>&1; then
-        raw=$(wget -qO- --timeout=15 -U "Mozilla/5.0 (compatible; maintenence-pro/1.0)" "https://www.nvidia.com/en-us/drivers/unix.md" 2>/dev/null) || raw=""
+        raw=$(wget -qO- --timeout=15 -U "Mozilla/5.0 (compatible; maintenence-pro/1.0)" "$url" 2>/dev/null) || raw=""
     else
         return 1
     fi
     [ -z "$raw" ] && return 1
-    section=$(printf '%s\n' "$raw" | awk -v k="$arch_key" '
-        index($0, "**" k) {p=1; next}
-        p && /^\*\*/ {exit}
-        p {print}
-    ')
-    NV_PROD=$(printf '%s\n' "$section" | sed -n 's/.*Production Branch Version:[[:space:]]*\[\([0-9][0-9.]*\)\].*/\1/p' | head -1)
-    NV_NFB=$(printf '%s\n' "$section" | sed -n 's/.*New Feature Branch Version:[[:space:]]*\[\([0-9][0-9.]*\)\].*/\1/p' | head -1)
+    command -v python3 >/dev/null 2>&1 || return 1
+    parsed=$(printf '%s' "$raw" | parse_nvidia_lookup) || return 1
+    NV_PROD=$(printf '%s\n' "$parsed" | sed -n '1p')
+    NV_NFB=$(printf '%s\n' "$parsed" | sed -n '2p')
     [ -n "$NV_PROD" ] || [ -n "$NV_NFB" ]
 }
 nvidia_ver_gt() {
