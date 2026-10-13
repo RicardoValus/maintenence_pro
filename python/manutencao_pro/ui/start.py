@@ -12,7 +12,7 @@ from manutencao_pro.state import HistoryStore, RunRecord
 
 
 class StartPage(Gtk.Box):
-    def __init__(self, on_start: Callable[[], None]) -> None:
+    def __init__(self, on_start: Callable[[], None], on_environment: Callable[[], None]) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._page = Adw.StatusPage(icon_name=APP_ID, title=_("Manutenção Pro"), vexpand=True)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, halign=Gtk.Align.CENTER)
@@ -35,8 +35,18 @@ class StartPage(Gtk.Box):
         self.button.add_css_class("suggested-action")
         self.button.add_css_class("pill")
         self.button.connect("clicked", lambda *_args: on_start())
+        self.environment_button = Gtk.Button(halign=Gtk.Align.CENTER)
+        self.environment_button.set_child(
+            Adw.ButtonContent(
+                icon_name="view-list-symbolic",
+                label=_("Ambiente de desenvolvimento"),
+            )
+        )
+        self.environment_button.add_css_class("pill")
+        self.environment_button.connect("clicked", lambda *_args: on_environment())
         box.append(self.scenario)
         box.append(self.button)
+        box.append(self.environment_button)
         self._page.set_child(box)
         self.append(self._page)
         self._demo = False

@@ -11,6 +11,7 @@ from manutencao_pro.ui.dialogs import confirm_close, confirm_reboot, present_abo
 from manutencao_pro.ui.log_panel import LogPanel
 from manutencao_pro.ui.result import ResultPage, summary_text, summary_title
 from manutencao_pro.ui.running import RunningPage
+from manutencao_pro.ui.environment_window import EnvironmentWindow
 from manutencao_pro.ui.start import StartPage
 
 
@@ -27,6 +28,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._shortcuts: Gtk.ShortcutsWindow | None = None
         self.model = RunModel()
         self.runner = MaintenanceRunner()
+        self._environment: EnvironmentWindow | None = None
         self.runner.on_line = self._on_line
         self.runner.on_exit = self._on_exit
         self._build()
@@ -83,7 +85,7 @@ class MainWindow(Adw.ApplicationWindow):
         header.pack_end(menu_button)
         toolbar.add_top_bar(header)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, vexpand=True)
-        self.start_page = StartPage(self.start)
+        self.start_page = StartPage(self.start, self._show_environment)
         self.running_page = RunningPage(self._cancel)
         self.result_page = ResultPage(self._copy_log, self._save_log, self.start, self._ask_reboot)
         self.log_panel = LogPanel()
@@ -112,6 +114,7 @@ class MainWindow(Adw.ApplicationWindow):
         breakpoint.add_setter(page_box, "margin-start", 8)
         breakpoint.add_setter(page_box, "margin-end", 8)
         breakpoint.add_setter(self.start_page.button, "hexpand", True)
+        breakpoint.add_setter(self.start_page.environment_button, "hexpand", True)
         breakpoint.add_setter(self.running_page.cancel_button, "hexpand", True)
         for button in self.result_page.action_buttons:
             breakpoint.add_setter(button, "hexpand", True)
@@ -119,6 +122,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _actions(self) -> None:
         self._add_window_action("start", self.start)
+        self._add_window_action("environment", self._show_environment)
         self._add_window_action("toggle-log", self._toggle_log)
         self._add_window_action("shortcuts", self._show_shortcuts)
         app = self.get_application()
@@ -251,6 +255,22 @@ class MainWindow(Adw.ApplicationWindow):
         notification.set_icon(Gio.ThemedIcon.new(APP_ID))
         app.send_notification("done", notification)
 
+    def _show_environment(self) -> None:
+        if self._environment is None:
+            self._environment = EnvironmentWindow(self, self._import_block)
+            self._environment.connect("destroy", self._drop_environment)
+        self._environment.present()
+
+    def _drop_environment(self, _window: Gtk.Window) -> None:
+        self._environment = None
+
+    def _import_block(self) -> str | None:
+        if self._demo:
+            return _("Modo demonstração. A importação não altera o sistema.")
+        if self.runner.is_running():
+            return _("Espere a manutenção terminar para importar.")
+        return None
+
     def _fail_to_start(self, message: str) -> None:
         self._uninhibit()
         self.stack.set_visible_child_name("start")
@@ -260,6 +280,7 @@ class MainWindow(Adw.ApplicationWindow):
 
 def _menu() -> Gio.Menu:
     menu = Gio.Menu()
+    menu.append(_("_Ambiente de desenvolvimento"), "win.environment")
     menu.append(_("_Atalhos de teclado"), "win.shortcuts")
     menu.append(_("_Sobre"), "app.about")
     menu.append(_("_Sair"), "app.sair")
