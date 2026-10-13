@@ -1,6 +1,6 @@
 project(
   'manutencao-pro',
-  version: '1.0.4',
+  version: '1.0.5',
   meson_version: '>= 0.60.0',
   license: 'MIT',
   default_options: ['warning_level=0'],

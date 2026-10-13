@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -119,3 +120,20 @@ nvidia_url_ok "$1" "$2"
         self.assertIn("--skip-module-load", text)
         self.assertIn("--no-x-check", text)
         self.assertIn("install_nvidia_upstream", text)
+
+    def test_accepts_nvidia_makeself_shebang(self) -> None:
+        match = re.search(r"nvidia_shebang_ok\(\) \{.*?\n\}", _script(), re.S)
+        if match is None:
+            raise AssertionError("nvidia_shebang_ok não encontrado")
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            official = directory / "official.run"
+            plain = directory / "plain.run"
+            other = directory / "other.run"
+            official.write_text("#! /bin/sh\nCRCsum=1\n", encoding="utf-8")
+            plain.write_text("#!/bin/sh\n", encoding="utf-8")
+            other.write_text("#!/bin/bash\n", encoding="utf-8")
+            script = f"{match.group(0)}\nnvidia_shebang_ok \"$1\"\n"
+            self.assertEqual(_bash(script, str(official)), 0)
+            self.assertEqual(_bash(script, str(plain)), 0)
+            self.assertNotEqual(_bash(script, str(other)), 0)

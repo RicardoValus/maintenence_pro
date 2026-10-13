@@ -185,12 +185,17 @@ nvidia_url_ok() {
     [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]] || return 1
     [[ "$url" =~ ^https://([a-z0-9-]+\.)?download\.nvidia\.com/XFree86/Linux-[A-Za-z0-9_]+/${version}/NVIDIA-Linux-[A-Za-z0-9_.-]+-${version}\.run$ ]]
 }
+nvidia_shebang_ok() {
+    local line
+    line=$(head -n 1 -- "$1" 2>/dev/null || true)
+    [ "$line" = "#!/bin/sh" ] || [ "$line" = "#! /bin/sh" ]
+}
 nvidia_run_cached() {
     local dest="$1" size
     [ -f "$dest" ] || return 1
     size=$(stat -c '%s' -- "$dest" 2>/dev/null || echo 0)
     [ "$size" -gt 100000000 ] || return 1
-    head -c 9 -- "$dest" | grep -q '^#!/bin/sh'
+    nvidia_shebang_ok "$dest"
 }
 nvidia_download_run() {
     local url="$1" dest="$2" partial="${2}.partial"
