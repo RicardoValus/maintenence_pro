@@ -1,3 +1,9 @@
+manutencao-pro (1.0.4) unstable; urgency=medium
+
+  * Instala o driver mais novo da NVIDIA.com quando ele não está no repositório.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 16:25:00 -0300
+
 manutencao-pro (1.0.3) unstable; urgency=medium
 
   * Adiciona a auditoria e a migração do ambiente de desenvolvimento.

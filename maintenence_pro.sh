@@ -117,6 +117,12 @@ def branch_version(info):
         return raw.strip()
     return ""
 
+def branch_url(info):
+    raw = info.get("DownloadURL")
+    if isinstance(raw, str):
+        return raw.strip()
+    return ""
+
 try:
     data = json.load(sys.stdin)
 except json.JSONDecodeError:
@@ -126,6 +132,8 @@ if not isinstance(items, list):
     sys.exit(1)
 prod = ""
 nfb = ""
+prod_url = ""
+nfb_url = ""
 for item in items:
     info = item.get("downloadInfo") if isinstance(item, dict) else None
     if not isinstance(info, dict):
@@ -137,18 +145,22 @@ for item in items:
     preview = str(info.get("IsFeaturePreview")) == "1"
     if not prod and recommended:
         prod = version
+        prod_url = branch_url(info)
     elif not nfb and preview:
         nfb = version
+        nfb_url = branch_url(info)
     if prod and nfb:
         break
 if not prod and not nfb:
     sys.exit(1)
-sys.stdout.write(prod + "\n" + nfb + "\n")
+sys.stdout.write(prod + "\n" + nfb + "\n" + prod_url + "\n" + nfb_url + "\n")
 '
 }
 fetch_nvidia_unix_versions() {
     NV_PROD=""
     NV_NFB=""
+    NV_PROD_URL=""
+    NV_NFB_URL=""
     local raw os_id parsed
     os_id=$(nvidia_lookup_os_id)
     local url="https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup&psid=120&lid=1&isWHQL=0&numberOfResults=6&sort1=1&languageCode=1033&osID=${os_id}&pfid=985"
@@ -164,7 +176,80 @@ fetch_nvidia_unix_versions() {
     parsed=$(printf '%s' "$raw" | parse_nvidia_lookup) || return 1
     NV_PROD=$(printf '%s\n' "$parsed" | sed -n '1p')
     NV_NFB=$(printf '%s\n' "$parsed" | sed -n '2p')
+    NV_PROD_URL=$(printf '%s\n' "$parsed" | sed -n '3p')
+    NV_NFB_URL=$(printf '%s\n' "$parsed" | sed -n '4p')
     [ -n "$NV_PROD" ] || [ -n "$NV_NFB" ]
+}
+nvidia_url_ok() {
+    local url="$1" version="$2"
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]] || return 1
+    [[ "$url" =~ ^https://([a-z0-9-]+\.)?download\.nvidia\.com/XFree86/Linux-[A-Za-z0-9_]+/${version}/NVIDIA-Linux-[A-Za-z0-9_.-]+-${version}\.run$ ]]
+}
+nvidia_run_cached() {
+    local dest="$1" size
+    [ -f "$dest" ] || return 1
+    size=$(stat -c '%s' -- "$dest" 2>/dev/null || echo 0)
+    [ "$size" -gt 100000000 ] || return 1
+    head -c 9 -- "$dest" | grep -q '^#!/bin/sh'
+}
+nvidia_download_run() {
+    local url="$1" dest="$2" partial="${2}.partial"
+    echo "⬇️  Baixando driver NVIDIA..."
+    if ! sudo curl -fL --retry 3 --retry-delay 2 -A "Mozilla/5.0 (compatible; maintenence-pro/1.0)" --max-time 900 -o "$partial" "$url"; then
+        sudo rm -f -- "$partial"
+        return 1
+    fi
+    sudo mv -f -- "$partial" "$dest"
+    sudo chmod 755 -- "$dest"
+}
+nvidia_waiting_reboot() {
+    local latest="$1" recorded mtime btime
+    recorded=$(cat /var/lib/manutencao-pro/nvidia-upstream-installed 2>/dev/null || true)
+    [ "$recorded" = "$latest" ] || return 1
+    mtime=$(stat -c '%Y' -- /var/lib/manutencao-pro/nvidia-upstream-installed 2>/dev/null || echo 0)
+    btime=$(awk '/^btime /{print $2}' /proc/stat)
+    [ -n "$btime" ] && [ "$mtime" -gt "$btime" ]
+}
+install_nvidia_upstream() {
+    local latest="$1" url="$2" dest
+    if ! nvidia_url_ok "$url" "$latest"; then
+        NV_UP_STATE="fail"
+        echo "⚠️  URL do driver NVIDIA recusada."
+        append_warn "NVIDIA Unix: URL inválida ($latest)"
+        return 1
+    fi
+    if nvidia_waiting_reboot "$latest"; then
+        NV_UP_STATE="upgraded"
+        echo "✅ Driver NVIDIA $latest já instalado. Reinicie para ativar."
+        append_reboot "driver NVIDIA $latest instalado"
+        return 0
+    fi
+    sudo mkdir -p /var/cache/manutencao-pro /var/lib/manutencao-pro
+    dest="/var/cache/manutencao-pro/NVIDIA-Linux-${latest}.run"
+    if ! nvidia_run_cached "$dest" && ! nvidia_download_run "$url" "$dest"; then
+        NV_UP_STATE="fail"
+        echo "⚠️  Falha ao baixar o driver NVIDIA $latest."
+        append_warn "NVIDIA Unix: download falhou ($latest)"
+        return 1
+    fi
+    if ! nvidia_run_cached "$dest"; then
+        sudo rm -f -- "$dest"
+        NV_UP_STATE="fail"
+        echo "⚠️  O arquivo baixado não é o instalador da NVIDIA."
+        append_warn "NVIDIA Unix: arquivo inválido ($latest)"
+        return 1
+    fi
+    echo "📦 Instalando driver NVIDIA $latest. A sessão continua no driver antigo até reiniciar."
+    if ! sudo sh "$dest" --ui=none --no-questions --no-x-check --skip-module-load --dkms --disable-nouveau --rebuild-initramfs --no-check-for-alternate-installs; then
+        NV_UP_STATE="fail"
+        echo "⚠️  O instalador da NVIDIA falhou. O arquivo ficou em $dest"
+        append_warn "NVIDIA Unix: instalação de $latest falhou"
+        return 1
+    fi
+    printf '%s\n' "$latest" | sudo tee /var/lib/manutencao-pro/nvidia-upstream-installed >/dev/null
+    NV_UP_STATE="upgraded"
+    echo "✅ Driver NVIDIA $latest instalado. Reinicie para usar."
+    append_reboot "driver NVIDIA $latest instalado"
 }
 nvidia_ver_gt() {
     [ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] &&
@@ -185,10 +270,12 @@ report_nvidia_upstream() {
         NV_UP_STATE="ok"
         echo "✅ Driver ativo ($ativo) já é o mais novo da NVIDIA."
     elif nvidia_ver_gt "$latest" "$ativo"; then
-        NV_UP_STATE="newer"
-        echo "⚠️  NVIDIA tem versão mais nova fora do repo: $latest. Ativo: $ativo"
-        echo "   Fonte: https://www.nvidia.com/en-us/drivers/unix/"
-        append_warn "NVIDIA Unix: $latest disponível (ativo $ativo)"
+        echo "   NVIDIA tem versão mais nova fora do repo: $latest. Ativo: $ativo"
+        if [ "$latest" = "$NV_NFB" ]; then
+            install_nvidia_upstream "$latest" "$NV_NFB_URL"
+        else
+            install_nvidia_upstream "$latest" "$NV_PROD_URL"
+        fi
     else
         NV_UP_STATE="ahead"
         echo "ℹ️  Driver ativo ($ativo) está à frente da página Unix da NVIDIA ($latest)."

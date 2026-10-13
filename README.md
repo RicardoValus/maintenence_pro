@@ -9,7 +9,7 @@ O código fica em [github.com/RicardoValus/maintenence_pro](https://github.com/R
 Na pasta do projeto, depois de gerar o pacote:
 
 ```bash
-sudo apt install ./manutencao-pro_1.0.3_all.deb
+sudo apt install ./manutencao-pro_1.0.4_all.deb
 ```
 
 O aplicativo aparece na busca das Atividades como **Manutenção Pro** e pode ser fixado no dock. A ação **Executar agora** abre a janela e inicia a manutenção.
@@ -91,7 +91,7 @@ sudo apt install meson ninja-build debhelper dh-python
 dpkg-buildpackage -us -uc -b
 ```
 
-O arquivo gerado é `manutencao-pro_1.0.3_all.deb`.
+O arquivo gerado é `manutencao-pro_1.0.4_all.deb`.
 
 ## O que o script faz
 
@@ -107,7 +107,7 @@ O arquivo gerado é `manutencao-pro_1.0.3_all.deb`.
 
 **3. GPU NVIDIA**
 - DKMS: confere o módulo do kernel atual e recompila se precisar.
-- Driver no repositório e na página da NVIDIA (só consulta, não instala a versão de fora).
+- Driver no repositório. Se a NVIDIA.com tiver versão mais nova, baixa o instalador oficial e instala. A sessão gráfica segue no driver atual até reiniciar.
 - Blacklist do nouveau.
 - Link GLX (`libglxserver_nvidia.so`).
 - Renderização GLX com `glxinfo`, para não cair no Mesa.
