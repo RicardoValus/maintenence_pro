@@ -1,3 +1,15 @@
+manutencao-pro (1.0.7) unstable; urgency=medium
+
+  * Gera o xorg.conf da NVIDIA para o GDM abrir depois do reinício.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 16:50:00 -0300
+
+manutencao-pro (1.0.6) unstable; urgency=medium
+
+  * Instala o driver da NVIDIA mesmo com o módulo atual ainda carregado.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 16:30:00 -0300
+
 manutencao-pro (1.0.5) unstable; urgency=medium
 
   * Aceita o instalador da NVIDIA que começa com "#! /bin/sh".

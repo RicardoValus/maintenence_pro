@@ -207,6 +207,30 @@ nvidia_download_run() {
     sudo mv -f -- "$partial" "$dest"
     sudo chmod 755 -- "$dest"
 }
+nvidia_xorg_ready() {
+    local conf="${1:-/etc/X11/xorg.conf}"
+    [ -f "$conf" ] || return 1
+    grep -q 'Driver[[:space:]]*"nvidia"' "$conf"
+}
+ensure_nvidia_xorg() {
+    if nvidia_xorg_ready; then
+        echo "✅ Xorg já aponta para o driver NVIDIA."
+        return 0
+    fi
+    echo "🖥️  Gravando /etc/X11/xorg.conf para o GDM iniciar com a NVIDIA..."
+    if ! sudo nvidia-xconfig >/dev/null; then
+        echo "⚠️  nvidia-xconfig falhou. Sem esse arquivo o GDM pode ficar na tela preta."
+        append_warn "NVIDIA: xorg.conf não foi gerado"
+        return 1
+    fi
+    if nvidia_xorg_ready; then
+        echo "✅ /etc/X11/xorg.conf aponta para o driver NVIDIA."
+        return 0
+    fi
+    echo "⚠️  /etc/X11/xorg.conf não aponta para a NVIDIA."
+    append_warn "NVIDIA: xorg.conf sem o driver NVIDIA"
+    return 1
+}
 nvidia_waiting_reboot() {
     local latest="$1" recorded mtime btime
     recorded=$(cat /var/lib/manutencao-pro/nvidia-upstream-installed 2>/dev/null || true)
@@ -225,6 +249,7 @@ install_nvidia_upstream() {
     fi
     if nvidia_waiting_reboot "$latest"; then
         NV_UP_STATE="upgraded"
+        ensure_nvidia_xorg || true
         echo "✅ Driver NVIDIA $latest já instalado. Reinicie para ativar."
         append_reboot "driver NVIDIA $latest instalado"
         return 0
@@ -245,10 +270,16 @@ install_nvidia_upstream() {
         return 1
     fi
     echo "📦 Instalando driver NVIDIA $latest. A sessão continua no driver antigo até reiniciar."
-    if ! sudo sh "$dest" --ui=none --no-questions --no-x-check --skip-module-load --dkms --disable-nouveau --rebuild-initramfs --no-check-for-alternate-installs; then
+    if ! sudo sh "$dest" --ui=none --no-questions --no-x-check --skip-module-load --allow-installation-with-running-driver --run-nvidia-xconfig --dkms --disable-nouveau --rebuild-initramfs --no-check-for-alternate-installs; then
         NV_UP_STATE="fail"
         echo "⚠️  O instalador da NVIDIA falhou. O arquivo ficou em $dest"
         append_warn "NVIDIA Unix: instalação de $latest falhou"
+        return 1
+    fi
+    if ! ensure_nvidia_xorg; then
+        NV_UP_STATE="fail"
+        append_warn "NVIDIA Unix: $latest instalado, mas o GDM pode não abrir"
+        append_reboot "driver NVIDIA $latest instalado sem xorg.conf"
         return 1
     fi
     printf '%s\n' "$latest" | sudo tee /var/lib/manutencao-pro/nvidia-upstream-installed >/dev/null

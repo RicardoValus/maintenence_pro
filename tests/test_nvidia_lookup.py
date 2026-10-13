@@ -119,6 +119,8 @@ nvidia_url_ok "$1" "$2"
         text = _script()
         self.assertIn("--skip-module-load", text)
         self.assertIn("--no-x-check", text)
+        self.assertIn("--allow-installation-with-running-driver", text)
+        self.assertIn("--run-nvidia-xconfig", text)
         self.assertIn("install_nvidia_upstream", text)
 
     def test_accepts_nvidia_makeself_shebang(self) -> None:
@@ -137,3 +139,18 @@ nvidia_url_ok "$1" "$2"
             self.assertEqual(_bash(script, str(official)), 0)
             self.assertEqual(_bash(script, str(plain)), 0)
             self.assertNotEqual(_bash(script, str(other)), 0)
+
+    def test_xorg_conf_must_name_the_nvidia_driver(self) -> None:
+        match = re.search(r"nvidia_xorg_ready\(\) \{.*?\n\}", _script(), re.S)
+        if match is None:
+            raise AssertionError("nvidia_xorg_ready não encontrado")
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw)
+            ready = directory / "xorg.conf"
+            empty = directory / "empty.conf"
+            ready.write_text('Section "Device"\n    Driver         "nvidia"\nEndSection\n', encoding="utf-8")
+            empty.write_text('Section "Device"\n    Driver         "modesetting"\nEndSection\n', encoding="utf-8")
+            script = f"{match.group(0)}\nnvidia_xorg_ready \"$1\"\n"
+            self.assertEqual(_bash(script, str(ready)), 0)
+            self.assertNotEqual(_bash(script, str(empty)), 0)
+            self.assertNotEqual(_bash(script, str(directory / "ausente.conf")), 0)
