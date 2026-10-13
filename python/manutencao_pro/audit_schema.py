@@ -22,6 +22,7 @@ from manutencao_pro.audit_model import (
     RemotePackage,
     Repository,
     SchemaError,
+    SystemOrigin,
     ToolPackage,
     canonicalize,
     normalize_apt_name,
@@ -33,6 +34,7 @@ from manutencao_pro.i18n import _
 def dumps_snapshot(snapshot: EnvironmentSnapshot) -> str:
     payload = {
         "schema_version": snapshot.schema_version,
+        "system": _system_dict(snapshot.system) if snapshot.system is not None else None,
         "apt_packages": [_apt_dict(item) for item in snapshot.apt_packages],
         "repositories": [_repo_dict(item) for item in snapshot.repositories],
         "npm_packages": [_tool_dict(item) for item in snapshot.npm_packages],
@@ -75,8 +77,28 @@ def loads_snapshot(text: str) -> EnvironmentSnapshot:
             extensions=_load_extensions(payload, manual),
             manual=tuple(manual),
             unavailable=_load_strings(payload, "unavailable"),
+            system=_load_system(payload),
         )
     )
+
+
+def _system_dict(item: SystemOrigin) -> dict[str, str]:
+    return {
+        "id": item.distro,
+        "version_id": item.version_id,
+        "version_codename": item.codename,
+        "architecture": item.architecture,
+    }
+
+
+def _load_system(payload: dict[str, object]) -> SystemOrigin | None:
+    raw = payload.get("system")
+    if not isinstance(raw, dict):
+        return None
+    distro = _text(raw, "id")
+    if not distro:
+        return None
+    return SystemOrigin(distro, _text(raw, "version_id"), _text(raw, "version_codename"), _text(raw, "architecture"))
 
 
 def _apt_dict(item: AptPackage) -> dict[str, str]:

@@ -7,6 +7,7 @@ py.install_sources(
     'audit_collect.py',
     'audit_install.py',
     'audit_model.py',
+    'audit_os.py',
     'audit_parse.py',
     'audit_plan.py',
     'audit_schema.py',

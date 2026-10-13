@@ -14,6 +14,7 @@ from manutencao_pro.audit_model import (
     ManualItem,
     repo_destination,
 )
+from manutencao_pro.audit_os import is_ubuntu_ppa, os_mismatch_warning, rewrite_codename
 from manutencao_pro.audit_parse import is_local_repository, safe_env_line
 from manutencao_pro.i18n import _
 
@@ -38,6 +39,7 @@ class ImportPlan:
     actions: tuple[PlannedAction, ...]
     skipped: tuple[str, ...]
     manual: tuple[ManualItem, ...]
+    warning: str = ""
 
 
 def detect_tools() -> dict[str, str | None]:
@@ -94,11 +96,15 @@ def build_plan(
     _plan_snap(desired, current, resolved, actions, skipped, manual)
     _plan_extensions(desired, current, resolved, actions, skipped, manual)
     _plan_env(desired, current, actions, skipped, manual)
-    return ImportPlan(tuple(actions), tuple(skipped), tuple(manual))
+    warning = os_mismatch_warning(desired.system, current.system)
+    return ImportPlan(tuple(actions), tuple(skipped), tuple(manual), warning)
 
 
 def format_plan(plan: ImportPlan) -> str:
-    lines = [_("Vai executar:")]
+    lines: list[str] = []
+    if plan.warning:
+        lines.extend([plan.warning, ""])
+    lines.append(_("Vai executar:"))
     if plan.actions:
         lines.extend(f"{index}. {action.summary}" for index, action in enumerate(plan.actions, start=1))
     else:
@@ -124,9 +130,11 @@ def _plan_repositories(desired, current, actions, skipped, manual) -> None:
     existing = {item.filename: _normalize(item.content) for item in current.repositories}
     for repo in desired.repositories:
         destination = repo_destination(repo.filename)
-        content = _normalize(repo.content)
+        content = _rewrite_repo(repo.content, desired, current)
         if destination is None or not content.strip():
             manual.append(ManualItem("repository", repo.filename or "?", _("arquivo de repositório inválido")))
+            continue
+        if _skip_ppa(content, current, manual, repo.filename):
             continue
         if is_local_repository(content):
             manual.append(ManualItem("repository", repo.filename, _("origem local (file: ou cdrom:); confira o caminho")))
@@ -246,3 +254,17 @@ def _batches(names: list[str], size: int) -> list[list[str]]:
 
 def _normalize(text: str) -> str:
     return text.replace("\r\n", "\n").strip() + "\n"
+
+
+def _rewrite_repo(content: str, desired, current) -> str:
+    source = desired.system.codename if desired.system else ""
+    target = current.system.codename if current.system else ""
+    return rewrite_codename(_normalize(content), source, target)
+
+
+def _skip_ppa(content: str, current, manual: list[ManualItem], filename: str) -> bool:
+    distro = current.system.distro.casefold() if current.system else ""
+    if distro != "debian" or not is_ubuntu_ppa(content):
+        return False
+    manual.append(ManualItem("repository", filename, _("PPA do Ubuntu; não aplicado no Debian")))
+    return True

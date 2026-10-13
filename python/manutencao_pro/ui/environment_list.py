@@ -3,6 +3,7 @@ from __future__ import annotations
 from gi.repository import GObject, Gtk, Pango
 
 from manutencao_pro.audit_model import AuditRow, EnvironmentSnapshot
+from manutencao_pro.audit_os import format_system
 from manutencao_pro.i18n import _
 
 FILTERS = (
@@ -16,6 +17,7 @@ FILTERS = (
     ("snap", "Snap"),
     ("environment", _("Variáveis")),
     ("extension", _("Extensões")),
+    ("system", _("Sistema")),
     ("manual", _("Ação manual")),
 )
 
@@ -70,4 +72,6 @@ def status_text(snapshot: EnvironmentSnapshot, visible: int) -> str:
     if snapshot.unavailable:
         missing = ", ".join(snapshot.unavailable)
         text = _("{count} itens. Não encontrados: {missing}").format(count=visible, missing=missing)
+    if snapshot.system is not None and snapshot.system.distro:
+        text = _("{status} · {system}").format(status=text, system=format_system(snapshot.system))
     return text

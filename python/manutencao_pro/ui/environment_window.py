@@ -13,7 +13,7 @@ from manutencao_pro.audit_model import EnvironmentSnapshot, ManualItem, SchemaEr
 from manutencao_pro.audit_plan import ImportPlan, build_plan, format_manual_report, format_plan
 from manutencao_pro.audit_schema import dumps_snapshot, loads_snapshot
 from manutencao_pro.i18n import _
-from manutencao_pro.ui.dialogs import show_error
+from manutencao_pro.ui.dialogs import confirm_os_mismatch, show_error
 from manutencao_pro.ui.environment_dialogs import ImportDialog, present_open_json, present_save_json
 from manutencao_pro.ui.environment_list import FILTERS, AuditItem, column, item_from_row, status_text
 
@@ -228,14 +228,21 @@ class EnvironmentWindow(Adw.Window):
         if self._closed or generation != self._generation:
             return False
         self._set_busy(False, _("Conferência pronta"))
+        if plan.warning and self._can_apply() is None:
+            confirm_os_mismatch(self, plan.warning, lambda: self._open_plan(plan))
+            return False
+        self._open_plan(plan)
+        return False
+
+    def _open_plan(self, plan: ImportPlan) -> None:
         self._dialog = ImportDialog(
             format_plan(plan),
             format_manual_report(plan.manual),
             self._can_apply(),
             lambda: self._start_apply(plan),
+            plan.warning or None,
         )
         self._dialog.present(self)
-        return False
 
     def _start_apply(self, plan: ImportPlan) -> None:
         if self._importing or self._dialog is None or self._can_apply() is not None:

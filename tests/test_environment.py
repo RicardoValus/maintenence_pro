@@ -8,6 +8,7 @@ from pathlib import Path
 from manutencao_pro.audit_apply import append_user_line, apply_plan, privileged_argv, write_root_file
 from manutencao_pro.audit_collect import CommandResult, collect_environment
 from manutencao_pro.audit_schema import dumps_snapshot, loads_snapshot
+from manutencao_pro.audit_os import is_ubuntu_ppa, os_mismatch_warning, rewrite_codename, system_from_release
 from manutencao_pro.audit_model import (
     SCHEMA_VERSION,
     AptPackage,
@@ -18,6 +19,7 @@ from manutencao_pro.audit_model import (
     RemotePackage,
     Repository,
     SchemaError,
+    SystemOrigin,
     ToolPackage,
     row_matches,
 )
@@ -332,3 +334,68 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "pkexec")
         self.assertEqual(calls[0][-1], "/etc/apt/sources.list.d/demo.list")
         self.assertNotIn("sudo", calls[0])
+
+
+class OsTests(unittest.TestCase):
+    def test_release_roundtrip_and_compatible_codename(self) -> None:
+        origin = system_from_release('ID=debian\nVERSION_ID="13"\nVERSION_CODENAME=trixie\n', "amd64")
+        assert origin is not None
+        self.assertEqual(origin, SystemOrigin("debian", "13", "trixie", "amd64"))
+        text = dumps_snapshot(EnvironmentSnapshot(system=origin))
+        self.assertIn('"id": "debian"', text)
+        self.assertIn('"version_codename": "trixie"', text)
+        self.assertEqual(loads_snapshot(text).system, origin)
+        same = SystemOrigin("debian", "13.1", "trixie", "amd64")
+        self.assertEqual(os_mismatch_warning(origin, same), "")
+        self.assertIn("ubuntu", os_mismatch_warning(origin, SystemOrigin("ubuntu", "24.04", "noble", "amd64")))
+        self.assertIn("bookworm", os_mismatch_warning(origin, SystemOrigin("debian", "12", "bookworm", "amd64")))
+
+    def test_rewrites_destination_codename_and_skips_ppa_on_debian(self) -> None:
+        rewritten = rewrite_codename(
+            "deb http://deb.debian.org/debian bookworm main\nSuites: bookworm bookworm-updates\n",
+            "bookworm",
+            "trixie",
+        )
+        self.assertIn("trixie main", rewritten)
+        self.assertIn("trixie-updates", rewritten)
+        self.assertNotIn("bookworm", rewritten)
+        self.assertEqual(rewrite_codename("notbookworm", "bookworm", "trixie"), "notbookworm")
+        self.assertTrue(is_ubuntu_ppa("deb https://ppa.launchpadcontent.net/user/ppa/ubuntu jammy main\n"))
+        source = SystemOrigin("ubuntu", "22.04", "jammy", "amd64")
+        debian = SystemOrigin("debian", "13", "trixie", "amd64")
+        ubuntu = SystemOrigin("ubuntu", "24.04", "noble", "amd64")
+        repos = (
+            Repository("debian.list", "deb http://archive.ubuntu.com/ubuntu jammy main\n"),
+            Repository("ppa.list", "deb https://ppa.launchpadcontent.net/user/ppa/ubuntu jammy main\n"),
+        )
+        skipped = build_plan(
+            EnvironmentSnapshot(repositories=repos, system=source),
+            EnvironmentSnapshot(system=debian),
+            TOOLS,
+        )
+        written = [action.content for action in skipped.actions if action.kind == "system_write"]
+        self.assertEqual(written, ["deb http://archive.ubuntu.com/ubuntu trixie main\n"])
+        self.assertTrue(any(item.name == "ppa.list" for item in skipped.manual))
+        self.assertNotIn("jammy", "\n".join(written))
+        kept = build_plan(
+            EnvironmentSnapshot(repositories=repos[1:], system=source),
+            EnvironmentSnapshot(system=ubuntu),
+            TOOLS,
+        )
+        ppa = next(action.content for action in kept.actions if action.kind == "system_write")
+        self.assertIn("noble", ppa)
+        self.assertNotIn("jammy", ppa)
+
+    def test_collect_records_dpkg_architecture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            release = root / "os-release"
+            release.write_text('ID="ubuntu"\nVERSION_ID="24.04"\nVERSION_CODENAME=noble\n', encoding="utf-8")
+
+            def runner(argv: list[str], timeout: float = 180) -> CommandResult:
+                if argv[:2] == ["dpkg", "--print-architecture"]:
+                    return CommandResult(0, "amd64\n", "")
+                return CommandResult(127, "", "")
+
+            snapshot = collect_environment(runner, home=root, apt_dir=root, environ={}, os_release=release)
+        self.assertEqual(snapshot.system, SystemOrigin("ubuntu", "24.04", "noble", "amd64"))

@@ -9,6 +9,22 @@ from manutencao_pro.i18n import _
 from manutencao_pro.paths import shortcuts_ui
 
 
+def confirm_os_mismatch(parent: Gtk.Window, message: str, on_confirm: Callable[[], None]) -> None:
+    dialog = Adw.AlertDialog(heading=_("A distro ou a versão difere do backup"), body=message)
+    dialog.add_response("cancel", _("Cancelar"))
+    dialog.add_response("continue", _("Continuar"))
+    dialog.set_response_appearance("continue", Adw.ResponseAppearance.DESTRUCTIVE)
+    dialog.set_default_response("cancel")
+    dialog.set_close_response("cancel")
+
+    def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
+        if response == "continue":
+            on_confirm()
+
+    dialog.connect("response", on_response)
+    dialog.present(parent)
+
+
 def show_error(parent: Gtk.Window, heading: str, body: str) -> None:
     dialog = Adw.AlertDialog(heading=heading, body=body)
     dialog.add_response("close", _("Fechar"))

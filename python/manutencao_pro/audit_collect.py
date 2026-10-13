@@ -16,6 +16,7 @@ from manutencao_pro.audit_model import (
     Repository,
     canonicalize,
 )
+from manutencao_pro.audit_os import read_system_origin
 from manutencao_pro.audit_parse import (
     is_secret_name,
     parse_apt_policy,
@@ -106,10 +107,12 @@ def collect_environment(
     home: Path | None = None,
     apt_dir: Path | None = None,
     environ: Mapping[str, str] | None = None,
+    os_release: Path | None = None,
 ) -> EnvironmentSnapshot:
     execute = runner or run_command
     root = home or Path.home()
     sources = apt_dir or Path("/etc/apt")
+    release = os_release or Path("/etc/os-release")
     env = os.environ if environ is None else environ
     manual: list[ManualItem] = []
     unavailable: list[str] = []
@@ -137,8 +140,17 @@ def collect_environment(
             extensions=_collect_extensions(execute, root, unavailable, manual),
             manual=tuple(manual),
             unavailable=tuple(unavailable),
+            system=_collect_system(execute, release),
         )
     )
+
+
+def _collect_system(runner: Callable[..., CommandResult], os_release: Path):
+    result = runner(["dpkg", "--print-architecture"], timeout=15)
+    architecture = ""
+    if result.code == 0 and result.stdout.strip():
+        architecture = result.stdout.split()[0]
+    return read_system_origin(os_release, architecture)
 
 
 def _collect_apt(runner: Callable[..., CommandResult], manual: list[ManualItem]) -> tuple:

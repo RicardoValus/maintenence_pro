@@ -1,3 +1,10 @@
+manutencao-pro (1.0.3) unstable; urgency=medium
+
+  * Adiciona a auditoria e a migração do ambiente de desenvolvimento.
+  * Confere a distro de origem antes de importar repositórios.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 16:00:00 -0300
+
 manutencao-pro (1.0.2) unstable; urgency=medium
 
   * Ajusta a tela de resultado: check do tema e botões sempre visíveis.

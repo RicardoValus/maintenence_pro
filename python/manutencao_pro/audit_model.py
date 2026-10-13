@@ -99,6 +99,14 @@ class AuditRow:
 
 
 @dataclass(frozen=True)
+class SystemOrigin:
+    distro: str
+    version_id: str
+    codename: str
+    architecture: str
+
+
+@dataclass(frozen=True)
 class EnvironmentSnapshot:
     apt_packages: tuple[AptPackage, ...] = ()
     repositories: tuple[Repository, ...] = ()
@@ -111,6 +119,7 @@ class EnvironmentSnapshot:
     extensions: tuple[Extension, ...] = ()
     manual: tuple[ManualItem, ...] = ()
     unavailable: tuple[str, ...] = ()
+    system: SystemOrigin | None = None
     schema_version: int = SCHEMA_VERSION
 
 
@@ -127,12 +136,22 @@ def canonicalize(snapshot: EnvironmentSnapshot) -> EnvironmentSnapshot:
         extensions=_unique(snapshot.extensions, lambda item: (item.editor, item.identifier)),
         manual=_unique(snapshot.manual, lambda item: (item.category, item.name, item.reason)),
         unavailable=tuple(sorted(set(snapshot.unavailable))),
+        system=snapshot.system,
         schema_version=snapshot.schema_version,
     )
 
 
 def iter_rows(snapshot: EnvironmentSnapshot) -> tuple[AuditRow, ...]:
     rows: list[AuditRow] = []
+    if snapshot.system is not None and snapshot.system.distro:
+        rows.append(
+            AuditRow(
+                "system",
+                snapshot.system.distro,
+                snapshot.system.version_id,
+                f"{snapshot.system.codename} {snapshot.system.architecture}".strip(),
+            )
+        )
     for item in snapshot.apt_packages:
         rows.append(AuditRow("apt", item.name, item.version, item.origin))
     for item in snapshot.repositories:

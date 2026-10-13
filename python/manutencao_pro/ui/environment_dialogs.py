@@ -11,7 +11,14 @@ FileCallback = Callable[[Gio.File], None]
 
 
 class ImportDialog(Adw.Dialog):
-    def __init__(self, plan_text: str, manual_text: str, blocked_reason: str | None, on_apply: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        plan_text: str,
+        manual_text: str,
+        blocked_reason: str | None,
+        on_apply: Callable[[], None],
+        warning: str | None = None,
+    ) -> None:
         super().__init__(title=_("Conferir importação"), content_width=680, content_height=560)
         self._on_apply = on_apply
         self._running = False
@@ -37,10 +44,10 @@ class ImportDialog(Adw.Dialog):
         box.set_margin_bottom(8)
         box.set_margin_start(8)
         box.set_margin_end(8)
+        if warning:
+            box.append(_notice(warning))
         if blocked_reason:
-            notice = Gtk.Label(label=blocked_reason, wrap=True, xalign=0)
-            notice.add_css_class("warning")
-            box.append(notice)
+            box.append(_notice(blocked_reason))
         box.append(_heading(_("O que vai executar")))
         box.append(self._plan_scroll())
         box.append(_heading(_("Progresso")))
@@ -155,6 +162,12 @@ def _scrolled(child: Gtk.Widget) -> Gtk.ScrolledWindow:
     scroll.set_vexpand(True)
     scroll.set_child(child)
     return scroll
+
+
+def _notice(text: str) -> Gtk.Label:
+    label = Gtk.Label(label=text, wrap=True, xalign=0)
+    label.add_css_class("warning")
+    return label
 
 
 def _heading(text: str) -> Gtk.Label:
