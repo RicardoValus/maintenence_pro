@@ -22,6 +22,7 @@ from manutencao_pro.audit_model import (
     SystemOrigin,
     ToolPackage,
     row_matches,
+    snapshot_for_export,
 )
 from manutencao_pro.audit_parse import parse_apt_policy, parse_extension_listing, parse_npm_list, parse_shell_file
 from manutencao_pro.audit_plan import ImportPlan, PlannedAction, build_plan, format_manual_report, format_plan
@@ -121,6 +122,21 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(SchemaError):
             loads_snapshot('{"schema_version": 2}')
 
+    def test_export_keeps_only_selected_groups(self) -> None:
+        snapshot = EnvironmentSnapshot(
+            apt_packages=(AptPackage("git", "2", "debian"),),
+            npm_packages=(ToolPackage("left-pad", "1.0.0"),),
+            manual=(ManualItem("apt", "local-deb", "manual"), ManualItem("npm", "private", "manual")),
+            unavailable=("npm", "cargo"),
+            system=SystemOrigin("debian", "13", "trixie", "amd64"),
+        )
+        chosen = snapshot_for_export(snapshot, {"apt"})
+        self.assertEqual(chosen.apt_packages, snapshot.apt_packages)
+        self.assertEqual(chosen.npm_packages, ())
+        self.assertEqual(chosen.manual, (ManualItem("apt", "local-deb", "manual"),))
+        self.assertEqual(chosen.unavailable, ())
+        self.assertEqual(chosen.system, snapshot.system)
+
     def test_row_filter(self) -> None:
         self.assertTrue(row_matches("apt", "git", "2", "debian", "Pacotes apt", query="git", selected="all"))
         self.assertFalse(row_matches("apt", "git", "2", "debian", "Pacotes apt", query="git", selected="npm"))
@@ -144,6 +160,10 @@ class CollectTests(unittest.TestCase):
             def runner(argv: list[str], timeout: float = 180) -> CommandResult:
                 calls.append(list(argv))
                 program = Path(argv[0]).name
+                if program == "dpkg-query":
+                    return CommandResult(0, "code\t1.94.0\tinstalled\ngit\t1:2.47.3-0+deb13u1\tinstalled\n", "")
+                if argv == ["apt-cache", "policy"]:
+                    return CommandResult(0, "Package files:\nPinned packages:\n", "")
                 if program == "apt-cache":
                     return CommandResult(0, APT_POLICY, "")
                 if program == "python3":
@@ -163,6 +183,8 @@ class CollectTests(unittest.TestCase):
                 environ={"EDITOR": "nvim", "PATH": "/usr/bin", "NPM_TOKEN": "super-secret-value"},
             )
         self.assertEqual(snapshot.apt_packages[0].name, "code")
+        self.assertEqual(snapshot.apt_packages[0].origin, "local")
+        self.assertFalse(any(call == ["apt-cache", "policy"] for call in calls))
         self.assertIn("npm", snapshot.unavailable)
         self.assertEqual(snapshot.pip_packages, (ToolPackage("black", "24.1.0"),))
         self.assertEqual(snapshot.cargo_packages, (ToolPackage("ripgrep", "14.1.0"),))
@@ -173,6 +195,36 @@ class CollectTests(unittest.TestCase):
         text = dumps_snapshot(snapshot)
         self.assertNotIn("super-secret-value", text)
         self.assertTrue(all(argv[0] != "sudo" for argv in calls))
+
+    def test_dpkg_list_survives_pin_summary_and_nvm_npm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            npm = home / ".nvm" / "versions" / "node" / "v20.20.2" / "bin" / "npm"
+            newer = home / ".nvm" / "versions" / "node" / "v24.20.0" / "bin" / "npm"
+            npm.parent.mkdir(parents=True)
+            newer.parent.mkdir(parents=True)
+            npm.write_text("", encoding="utf-8")
+            (npm.parent / "node").write_text("", encoding="utf-8")
+            newer.write_text("", encoding="utf-8")
+            alias = home / ".nvm" / "alias"
+            alias.mkdir()
+            (alias / "default").write_text("20\n", encoding="utf-8")
+
+            def runner(argv: list[str], timeout: float = 180) -> CommandResult:
+                if argv[0] == "dpkg-query":
+                    return CommandResult(0, "git\t2\tinstalled\n", "")
+                if argv == ["apt-cache", "policy"]:
+                    return CommandResult(0, "Package files:\nPinned packages:\n", "")
+                if argv[:2] == ["apt-cache", "policy"]:
+                    return CommandResult(0, APT_POLICY, "")
+                if argv[:2] == [str(npm.parent / "node"), str(npm)]:
+                    return CommandResult(0, '{"dependencies":{"left-pad":{"version":"1.0.0"}}}\n', "")
+                return CommandResult(127, "", "")
+
+            snapshot = collect_environment(runner, home=home, apt_dir=home, environ={"PATH": "/usr/bin"})
+        self.assertEqual(snapshot.apt_packages[0].name, "git")
+        self.assertEqual(snapshot.npm_packages, (ToolPackage("left-pad", "1.0.0"),))
+        self.assertNotIn("npm", snapshot.unavailable)
 
 
 class PlanTests(unittest.TestCase):

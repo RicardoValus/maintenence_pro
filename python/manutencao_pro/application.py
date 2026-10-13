@@ -11,6 +11,7 @@ from manutencao_pro.constants import SCENARIOS
 from manutencao_pro.i18n import _
 from manutencao_pro.paths import APP_ID, icon_theme_dir
 from manutencao_pro.ui.dialogs import present_about
+from manutencao_pro.ui.theme import apply_app_theme
 from manutencao_pro.ui.window import MainWindow
 
 
@@ -27,6 +28,7 @@ class ManutencaoApplication(Adw.Application):
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
         self._icons()
+        apply_app_theme()
         action = Gio.SimpleAction.new("about", None)
         action.connect("activate", self._on_about)
         self.add_action(action)

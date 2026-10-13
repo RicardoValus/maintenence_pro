@@ -7,12 +7,14 @@ from gi.repository import Adw, Gtk
 from manutencao_pro.constants import STEP_IDS, step_title
 from manutencao_pro.i18n import _
 from manutencao_pro.state import CANCELLED, ERROR, PENDING, RUNNING, SUCCESS, WARNING, RunModel
+from manutencao_pro.ui.motion import ProgressPulse
+from manutencao_pro.ui.status_icon import StatusIcon
 
-_ICONS = {
-    SUCCESS: "object-select-symbolic",
-    WARNING: "dialog-warning-symbolic",
-    ERROR: "dialog-error-symbolic",
-    CANCELLED: "process-stop-symbolic",
+_KINDS = {
+    SUCCESS: "success",
+    WARNING: "warning",
+    ERROR: "error",
+    CANCELLED: "cancelled",
 }
 
 
@@ -23,6 +25,7 @@ class _StepRow:
         self.row = Adw.ActionRow(title=step_title(step_id))
         self.row.add_css_class("dim-label")
         self.slot = Gtk.Box()
+        self.slot.set_size_request(28, 16)
         self.row.add_suffix(self.slot)
 
     def apply(self, status: str, title: str) -> None:
@@ -40,15 +43,21 @@ class _StepRow:
         if status == RUNNING:
             self.slot.append(Adw.Spinner())
             return
-        icon_name = _ICONS.get(status)
-        if icon_name is not None:
-            self.slot.append(Gtk.Image(icon_name=icon_name, pixel_size=16))
+        kind = _KINDS.get(status)
+        if kind is None:
+            return
+        icon = StatusIcon()
+        self.slot.append(icon)
+        icon.present(kind)
 
 
 class RunningPage(Gtk.Box):
     def __init__(self, on_cancel: Callable[[], None]) -> None:
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         self.progress = Gtk.ProgressBar(show_text=True)
+        self.progress.add_css_class("mp-mono")
+        self._pulse = ProgressPulse(self.progress)
+        self.connect("unrealize", lambda *_args: self._pulse.stop())
         self.group = Adw.PreferencesGroup(title=_("Etapas"))
         self._rows = {step_id: _StepRow(step_id) for step_id in STEP_IDS}
         for step_id in STEP_IDS:
@@ -72,7 +81,12 @@ class RunningPage(Gtk.Box):
             if row is None:
                 continue
             row.apply(step.status, step.title)
-        self.progress.set_fraction(model.fraction)
+        waiting = model.status == RUNNING and model.fraction <= 0
+        if waiting:
+            self._pulse.start()
+        else:
+            self._pulse.stop()
+            self.progress.set_fraction(model.fraction)
         index, total = model.progress_index
         self.progress.set_text(_("Etapa {index} de {total}").format(index=index, total=total))
         self.cancel_button.set_sensitive(model.can_cancel)

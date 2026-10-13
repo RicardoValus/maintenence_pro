@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from manutencao_pro.constants import SCENARIOS
@@ -13,11 +18,14 @@ from manutencao_pro.ui.result import ResultPage, summary_text, summary_title
 from manutencao_pro.ui.running import RunningPage
 from manutencao_pro.ui.environment_window import EnvironmentWindow
 from manutencao_pro.ui.start import StartPage
+from manutencao_pro.ui.theme import apply_app_theme
 
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, application: Adw.Application) -> None:
         super().__init__(application=application, title=_("Manutenção Pro"))
+        self.add_css_class("mp-app")
+        apply_app_theme()
         self.set_default_size(480, 680)
         self.set_size_request(360, 420)
         self._demo = False
@@ -95,11 +103,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.add_named(self.result_page, "result")
         self.stack.connect("notify::visible-child-name", lambda *_args: self._sync_log_visibility())
         clamp = Adw.Clamp(maximum_size=720, tightening_threshold=480)
-        page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        page_box.set_margin_top(12)
-        page_box.set_margin_bottom(12)
-        page_box.set_margin_start(12)
-        page_box.set_margin_end(12)
+        page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        page_box.set_margin_top(16)
+        page_box.set_margin_bottom(16)
+        page_box.set_margin_start(16)
+        page_box.set_margin_end(16)
         page_box.append(self.stack)
         page_box.append(self.log_panel)
         clamp.set_child(page_box)
@@ -139,7 +147,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_line(self, line: str) -> None:
         self._log_lines.append(line)
-        self.log_panel.append(line)
+        self.log_panel.append_line(line)
         self.model.consume(line)
         self.runner.set_current_step(self.model.current_step_id)
         self.running_page.sync(self.model)

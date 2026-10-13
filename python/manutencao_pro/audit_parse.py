@@ -136,10 +136,15 @@ def parse_dpkg_query(text: str) -> tuple[AptPackage, ...]:
         if len(parts) != 3:
             continue
         name, version, status = parts
-        if not status.endswith(" installed") or not name or not version:
+        if not _installed_status(status) or not name or not version:
             continue
         packages.append(AptPackage(name, version, "desconhecida"))
     return tuple(packages)
+
+
+def _installed_status(status: str) -> bool:
+    text = status.strip()
+    return text == "installed" or text.endswith(" installed")
 
 
 def parse_npm_list(text: str) -> tuple[ToolPackage, ...]:

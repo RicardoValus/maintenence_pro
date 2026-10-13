@@ -1,6 +1,6 @@
 project(
   'manutencao-pro',
-  version: '1.0.7',
+  version: '1.0.9',
   meson_version: '>= 0.60.0',
   license: 'MIT',
   default_options: ['warning_level=0'],
@@ -35,6 +35,7 @@ install_data(
 )
 install_data(
   'data/shortcuts.ui',
+  'data/style.css',
   install_dir: get_option('datadir') / 'manutencao-pro',
 )
 install_data(
@@ -44,6 +45,17 @@ install_data(
 install_data(
   'data/icons/hicolor/symbolic/apps/dev.ricardo.ManutencaoPro-symbolic.svg',
   install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'symbolic' / 'apps',
+)
+install_data(
+  [
+    'data/icons/hicolor/scalable/status/mp-alert-symbolic.svg',
+    'data/icons/hicolor/scalable/status/mp-check-symbolic.svg',
+    'data/icons/hicolor/scalable/status/mp-info-symbolic.svg',
+    'data/icons/hicolor/scalable/status/mp-minus-symbolic.svg',
+    'data/icons/hicolor/scalable/status/mp-power-symbolic.svg',
+    'data/icons/hicolor/scalable/status/mp-x-symbolic.svg',
+  ],
+  install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'status',
 )
 install_man(
   'man/manutencao-pro.1',

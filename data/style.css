@@ -1,0 +1,260 @@
+window.mp-app {
+  --window-bg-color: #0f1115;
+  --window-fg-color: #f4f4f5;
+  --view-bg-color: #0f1115;
+  --view-fg-color: #f4f4f5;
+  --card-bg-color: #1a1c22;
+  --card-fg-color: #f4f4f5;
+  --headerbar-bg-color: #0f1115;
+  --headerbar-fg-color: #f4f4f5;
+  --headerbar-border-color: alpha(#ffffff, 0.06);
+  --headerbar-backdrop-color: #0f1115;
+  --dialog-bg-color: #14161c;
+  --dialog-fg-color: #f4f4f5;
+  --popover-bg-color: #1a1c22;
+  --popover-fg-color: #f4f4f5;
+  --sidebar-bg-color: #0f1115;
+  --accent-bg-color: #ff7800;
+  --accent-fg-color: #1c0e04;
+  --accent-color: #ff9a3c;
+  --success-bg-color: #ff7800;
+  --success-fg-color: #1c0e04;
+  --success-color: #ff9a3c;
+  --warning-color: #f5c451;
+  --error-color: #ff6b6b;
+  --border-color: alpha(#ffffff, 0.08);
+  background-color: #0f1115;
+  color: #f4f4f5;
+  font-family: Inter, Manrope, "Noto Sans", sans-serif;
+}
+
+window.mp-app headerbar {
+  background-color: #0f1115;
+  color: #f4f4f5;
+  box-shadow: none;
+  border-bottom: 1px solid alpha(#ffffff, 0.06);
+}
+
+window.mp-app label.dim-label,
+window.mp-app label.mp-kicker {
+  color: #a1a1aa;
+}
+
+window.mp-app label.mp-mono,
+window.mp-app label.subtitle,
+window.mp-app progressbar text,
+window.mp-app textview,
+window.mp-app textview text {
+  font-family: "JetBrains Mono", "Fira Code", "Noto Sans Mono", monospace;
+}
+
+window.mp-app preferencesgroup label.heading {
+  font-family: "JetBrains Mono", "Fira Code", "Noto Sans Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #a1a1aa;
+}
+
+window.mp-app columnview.mp-audit > header > button label {
+  font-family: "JetBrains Mono", "Fira Code", "Noto Sans Mono", monospace;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+window.mp-app list.boxed-list {
+  background-color: #1a1c22;
+  border-radius: 12px;
+  border: 1px solid alpha(#ffffff, 0.08);
+  box-shadow: 0 10px 28px alpha(#000000, 0.32);
+  padding: 6px;
+}
+
+window.mp-app list.boxed-list > row {
+  background-color: transparent;
+  border-radius: 10px;
+  border-bottom: none;
+  min-height: 52px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+window.mp-app list.boxed-list > row:hover {
+  background-color: alpha(#ff7800, 0.12);
+}
+
+window.mp-app list.boxed-list > row:active {
+  background-color: alpha(#ff7800, 0.18);
+}
+
+window.mp-app columnview.mp-audit,
+window.mp-app columnview.mp-audit.view {
+  background-color: #1a1c22;
+  color: #f4f4f5;
+  border-radius: 12px;
+}
+
+window.mp-app columnview.mp-audit > header {
+  background-color: #14161c;
+  border-bottom: 1px solid alpha(#ffffff, 0.06);
+}
+
+window.mp-app columnview.mp-audit > header > button {
+  background: none;
+  color: #a1a1aa;
+  font-family: "JetBrains Mono", "Fira Code", "Noto Sans Mono", monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  box-shadow: none;
+}
+
+window.mp-app columnview.mp-audit listview,
+window.mp-app columnview.mp-audit listview.view,
+window.mp-app scrolledwindow.mp-card,
+window.mp-app scrolledwindow.mp-card viewport {
+  background-color: transparent;
+  color: #f4f4f5;
+}
+
+window.mp-app columnview.mp-audit listview > row {
+  background-color: transparent;
+  min-height: 44px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid alpha(#ffffff, 0.05);
+}
+
+window.mp-app columnview.mp-audit listview > row:hover {
+  background-color: alpha(#ff7800, 0.12);
+}
+
+window.mp-app scrolledwindow.mp-card {
+  border-radius: 12px;
+  border: 1px solid alpha(#ffffff, 0.08);
+  background-color: #1a1c22;
+  box-shadow: 0 10px 28px alpha(#000000, 0.32);
+}
+
+window.mp-app searchentry,
+window.mp-app dropdown > button {
+  border-radius: 10px;
+  background-color: #1a1c22;
+  border: 1px solid alpha(#ffffff, 0.08);
+  min-height: 38px;
+  color: #f4f4f5;
+}
+
+window.mp-app searchentry:focus-within,
+window.mp-app dropdown > button:focus,
+window.mp-app entry:focus,
+window.mp-app button:focus-visible {
+  border-color: #ff7800;
+  outline-color: #ff9a3c;
+}
+
+window.mp-app button.pill {
+  border-radius: 999px;
+  padding-left: 16px;
+  padding-right: 16px;
+  min-height: 36px;
+}
+
+window.mp-app button.pill:not(.suggested-action):not(.destructive-action):hover,
+window.mp-app button.mp-disclosure:hover {
+  background-color: alpha(#ff7800, 0.14);
+}
+
+window.mp-app button.suggested-action {
+  background-color: #ff7800;
+  color: #1c0e04;
+}
+
+window.mp-app button.suggested-action:hover {
+  background-color: #ff8f33;
+  color: #1c0e04;
+}
+
+window.mp-app button.mp-disclosure {
+  background: none;
+  border-radius: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  box-shadow: none;
+}
+
+window.mp-app flowbox.mp-choices {
+  background-color: #1a1c22;
+  border-radius: 12px;
+  border: 1px solid alpha(#ffffff, 0.08);
+  padding: 10px;
+}
+
+window.mp-app flowbox.mp-choices flowboxchild {
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+
+window.mp-app flowbox.mp-choices flowboxchild:hover {
+  background-color: alpha(#ff7800, 0.12);
+}
+
+window.mp-app progressbar trough {
+  border-radius: 999px;
+  min-height: 6px;
+  background-color: #262830;
+}
+
+window.mp-app progressbar progress {
+  border-radius: 999px;
+  background-color: #ff7800;
+}
+
+window.mp-app progressbar.mp-pulse {
+  min-height: 4px;
+}
+
+window.mp-app scrolledwindow.mp-log {
+  border-radius: 12px;
+  border: 1px solid alpha(#ffffff, 0.08);
+  background-color: #1a1c22;
+}
+
+window.mp-app textview.mp-log-view,
+window.mp-app textview.mp-log-view text {
+  background-color: #1a1c22;
+  color: #e4e4e7;
+}
+
+window.mp-app textview text selection {
+  background-color: alpha(#ff7800, 0.35);
+  color: #f4f4f5;
+}
+
+window.mp-app toast {
+  background-color: #1a1c22;
+  color: #f4f4f5;
+  border: 1px solid alpha(#ff7800, 0.7);
+  border-radius: 12px;
+}
+
+window.mp-app image.mp-status-success,
+window.mp-app image.mp-status-accent {
+  color: #ff9a3c;
+}
+
+window.mp-app image.mp-status-warning {
+  color: #f5c451;
+}
+
+window.mp-app image.mp-status-error {
+  color: #ff6b6b;
+}
+
+window.mp-app image.mp-status-info {
+  color: #c4c4cc;
+}
+
+window.mp-app image.mp-status-muted {
+  color: #8b8b96;
+}

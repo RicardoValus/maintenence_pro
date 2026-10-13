@@ -1,3 +1,16 @@
+manutencao-pro (1.0.9) unstable; urgency=medium
+
+  * Lê o npm do nvm mesmo quando o node não está no PATH da sessão.
+  * Aplica o tema escuro nas duas janelas, com cards, tipografia mono e ícones outline.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 17:20:00 -0300
+
+manutencao-pro (1.0.8) unstable; urgency=medium
+
+  * Lista os pacotes apt no backup e permite escolher o que exportar.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Tue, 13 Oct 2026 17:10:00 -0300
+
 manutencao-pro (1.0.7) unstable; urgency=medium
 
   * Gera o xorg.conf da NVIDIA para o GDM abrir depois do reinício.

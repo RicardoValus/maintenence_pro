@@ -7,6 +7,7 @@ LIBEXEC = Path("/usr/libexec/manutencao-pro")
 WRAPPER = LIBEXEC / "wrapper"
 SCRIPT = LIBEXEC / "maintenence_pro.sh"
 SHORTCUTS_UI = Path("/usr/share/manutencao-pro/shortcuts.ui")
+STYLE_CSS = Path("/usr/share/manutencao-pro/style.css")
 
 
 def project_root() -> Path | None:
@@ -25,6 +26,17 @@ def shortcuts_ui() -> Path | None:
     path = root / "data" / "shortcuts.ui"
     if path.is_file():
         return path
+    return None
+
+
+def style_css() -> Path | None:
+    root = project_root()
+    if root is not None:
+        path = root / "data" / "style.css"
+        if path.is_file():
+            return path
+    if STYLE_CSS.is_file():
+        return STYLE_CSS
     return None
 
 

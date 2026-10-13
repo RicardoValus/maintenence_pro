@@ -39,6 +39,11 @@ def column(title: str, attribute: str) -> Gtk.ColumnViewColumn:
 
     def setup(_factory: Gtk.SignalListItemFactory, item: Gtk.ListItem) -> None:
         label = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, hexpand=True)
+        if attribute in {"version", "detail"}:
+            label.add_css_class("mp-mono")
+        if attribute == "category":
+            label.add_css_class("mp-mono")
+            label.add_css_class("mp-kicker")
         item.set_child(label)
 
     def bind(_factory: Gtk.SignalListItemFactory, item: Gtk.ListItem) -> None:

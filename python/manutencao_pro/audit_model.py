@@ -123,6 +123,33 @@ class EnvironmentSnapshot:
     schema_version: int = SCHEMA_VERSION
 
 
+def snapshot_for_export(snapshot: EnvironmentSnapshot, selected: set[str]) -> EnvironmentSnapshot:
+    groups = set(selected)
+    return canonicalize(
+        EnvironmentSnapshot(
+            apt_packages=snapshot.apt_packages if "apt" in groups else (),
+            repositories=snapshot.repositories if "repository" in groups else (),
+            npm_packages=snapshot.npm_packages if "npm" in groups else (),
+            pip_packages=snapshot.pip_packages if "pip" in groups else (),
+            cargo_packages=snapshot.cargo_packages if "cargo" in groups else (),
+            flatpaks=snapshot.flatpaks if "flatpak" in groups else (),
+            snaps=snapshot.snaps if "snap" in groups else (),
+            variables=snapshot.variables if "environment" in groups else (),
+            extensions=snapshot.extensions if "extension" in groups else (),
+            manual=tuple(item for item in snapshot.manual if item.category in groups),
+            unavailable=tuple(item for item in snapshot.unavailable if _unavailable_group(item) in groups),
+            system=snapshot.system,
+            schema_version=snapshot.schema_version,
+        )
+    )
+
+
+def _unavailable_group(name: str) -> str:
+    if name in {"code", "cursor"}:
+        return "extension"
+    return name
+
+
 def canonicalize(snapshot: EnvironmentSnapshot) -> EnvironmentSnapshot:
     return EnvironmentSnapshot(
         apt_packages=_unique(snapshot.apt_packages, lambda item: item.name),

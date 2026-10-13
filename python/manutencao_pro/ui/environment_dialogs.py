@@ -20,6 +20,7 @@ class ImportDialog(Adw.Dialog):
         warning: str | None = None,
     ) -> None:
         super().__init__(title=_("Conferir importação"), content_width=680, content_height=560)
+        self.add_css_class("mp-app")
         self._on_apply = on_apply
         self._running = False
         self._log = _text_view()
@@ -31,8 +32,10 @@ class ImportDialog(Adw.Dialog):
         self._plan.get_buffer().set_text(plan_text)
         self._apply = Gtk.Button(label=_("Aplicar"))
         self._apply.add_css_class("suggested-action")
+        self._apply.add_css_class("pill")
         self._apply.connect("clicked", self._clicked)
         self._close = Gtk.Button(label=_("Cancelar"))
+        self._close.add_css_class("pill")
         self._close.connect("clicked", lambda *_args: self.close())
         if blocked_reason:
             self._apply.set_sensitive(False)
@@ -150,6 +153,7 @@ def _finish(finish: Callable[[Gio.AsyncResult], Gio.File | None], result: Gio.As
 
 def _text_view() -> Gtk.TextView:
     view = Gtk.TextView(editable=False, cursor_visible=False, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
+    view.add_css_class("mp-log-view")
     view.set_left_margin(8)
     view.set_right_margin(8)
     view.set_top_margin(8)

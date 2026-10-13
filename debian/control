@@ -9,7 +9,7 @@ Rules-Requires-Root: no
 Package: manutencao-pro
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends}, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, polkitd, pkexec, libglib2.0-bin
-Recommends: fwupd, mesa-utils
+Recommends: fwupd, mesa-utils, fonts-inter, fonts-jetbrains-mono
 Description: manutenção diária do Debian com interface gráfica
  Aplicativo em GTK 4 e libadwaita para a manutenção diária do sistema:
  atualização de pacotes, DKMS, microcode, firmware e driver NVIDIA.

@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from manutencao_pro.audit_model import (
+    APT_BATCH_SIZE,
     SOURCE_SESSION,
     USER_SHELL_FILES,
+    AptPackage,
     EnvVariable,
     EnvironmentSnapshot,
     Extension,
@@ -124,7 +126,14 @@ def collect_environment(
         EnvironmentSnapshot(
             apt_packages=_collect_apt(execute, manual),
             repositories=repos,
-            npm_packages=_collect_tool(execute, ["npm", "list", "-g", "--depth=0", "--json"], "npm", parse_npm_list, unavailable, manual),
+            npm_packages=_collect_tool(
+                execute,
+                _npm_argv(root, env),
+                "npm",
+                parse_npm_list,
+                unavailable,
+                manual,
+            ),
             pip_packages=_collect_tool(
                 execute,
                 ["python3", "-m", "pip", "list", "--user", "--format=json"],
@@ -133,7 +142,14 @@ def collect_environment(
                 unavailable,
                 manual,
             ),
-            cargo_packages=_collect_tool(execute, ["cargo", "install", "--list"], "cargo", parse_cargo_list, unavailable, manual),
+            cargo_packages=_collect_tool(
+                execute,
+                [_command(root, env, "cargo"), "install", "--list"],
+                "cargo",
+                parse_cargo_list,
+                unavailable,
+                manual,
+            ),
             flatpaks=_collect_flatpak(execute, unavailable, manual),
             snaps=_collect_snap(execute, unavailable, manual),
             variables=variables,
@@ -154,15 +170,92 @@ def _collect_system(runner: Callable[..., CommandResult], os_release: Path):
 
 
 def _collect_apt(runner: Callable[..., CommandResult], manual: list[ManualItem]) -> tuple:
-    result = runner(["apt-cache", "policy"], timeout=180)
-    if result.code == 0 and result.stdout.strip():
-        return parse_apt_policy(result.stdout)
-    fallback = runner(["dpkg-query", "-W", "-f=${Package}\t${Version}\t${Status}\n"], timeout=60)
-    if fallback.code == 0 and fallback.stdout.strip():
-        manual.append(ManualItem("apt", "apt-cache", _("origem indisponível; a lista veio do dpkg")))
-        return parse_dpkg_query(fallback.stdout)
-    manual.append(ManualItem("apt", "apt", _("não foi possível listar os pacotes")))
-    return ()
+    listed = runner(["dpkg-query", "-W", "-f=${Package}\t${Version}\t${db:Status-Status}\n"], timeout=60)
+    if listed.code != 0 or not listed.stdout.strip():
+        manual.append(ManualItem("apt", "apt", _("não foi possível listar os pacotes")))
+        return ()
+    packages = parse_dpkg_query(listed.stdout)
+    origins = _apt_origins(runner, [item.name for item in packages])
+    return tuple(AptPackage(item.name, item.version, origins.get(item.name, "desconhecida")) for item in packages)
+
+
+def _apt_origins(runner: Callable[..., CommandResult], names: list[str]) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for offset in range(0, len(names), APT_BATCH_SIZE):
+        batch = names[offset : offset + APT_BATCH_SIZE]
+        result = runner(["apt-cache", "policy", *batch], timeout=180)
+        if result.code != 0 or not result.stdout.strip():
+            continue
+        for item in parse_apt_policy(result.stdout):
+            found[item.name] = item.origin
+    return found
+
+
+def _command(home: Path, env: Mapping[str, str], name: str) -> str:
+    found = _on_path(env.get("PATH", ""), name)
+    if found:
+        return found
+    if name == "npm":
+        npm = _nvm_npm(home)
+        if npm is not None:
+            return str(npm)
+    if name == "cargo":
+        cargo = home / ".cargo" / "bin" / "cargo"
+        if cargo.is_file():
+            return str(cargo)
+    return name
+
+
+def _on_path(path: str, name: str) -> str:
+    for entry in path.split(":"):
+        if not entry:
+            continue
+        candidate = Path(entry) / name
+        if candidate.is_file():
+            return str(candidate)
+    return ""
+
+
+def _npm_argv(home: Path, env: Mapping[str, str]) -> list[str]:
+    npm = _command(home, env, "npm")
+    node = Path(npm).with_name("node")
+    if node.is_file():
+        return [str(node), npm, "list", "-g", "--depth=0", "--json"]
+    return [npm, "list", "-g", "--depth=0", "--json"]
+
+
+def _nvm_npm(home: Path) -> Path | None:
+    binaries = _nvm_binaries(home)
+    if not binaries:
+        return None
+    matched = [item for item in binaries if _version_matches(item, _nvm_alias(home))]
+    if matched:
+        return matched[-1]
+    return binaries[-1]
+
+
+def _nvm_binaries(home: Path) -> list[Path]:
+    root = home / ".nvm" / "versions" / "node"
+    if not root.is_dir():
+        return []
+    return sorted(path for path in root.glob("*/bin/npm") if path.is_file())
+
+
+def _nvm_alias(home: Path) -> str:
+    alias = home / ".nvm" / "alias" / "default"
+    if not alias.is_file():
+        return ""
+    version = alias.read_text(encoding="utf-8").strip()
+    if not version or "/" in version:
+        return ""
+    return version if version.startswith("v") else f"v{version}"
+
+
+def _version_matches(npm: Path, alias: str) -> bool:
+    if not alias:
+        return False
+    name = npm.parents[1].name
+    return name == alias or name.startswith(f"{alias}.")
 
 
 def _collect_tool(runner, argv: list[str], category: str, parser, unavailable: list[str], manual: list[ManualItem]):

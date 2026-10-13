@@ -9,18 +9,30 @@ from gi.repository import Adw, Gio, GLib, GObject, Gtk
 
 from manutencao_pro.audit_apply import ProductionHooks, apply_plan
 from manutencao_pro.audit_collect import collect_environment
-from manutencao_pro.audit_model import EnvironmentSnapshot, ManualItem, SchemaError, iter_rows, row_matches
+from manutencao_pro.audit_model import (
+    EnvironmentSnapshot,
+    ManualItem,
+    SchemaError,
+    iter_rows,
+    row_matches,
+    snapshot_for_export,
+)
 from manutencao_pro.audit_plan import ImportPlan, build_plan, format_manual_report, format_plan
 from manutencao_pro.audit_schema import dumps_snapshot, loads_snapshot
 from manutencao_pro.i18n import _
 from manutencao_pro.ui.dialogs import confirm_os_mismatch, show_error
+from manutencao_pro.ui.environment_choices import ExportChoices
 from manutencao_pro.ui.environment_dialogs import ImportDialog, present_open_json, present_save_json
 from manutencao_pro.ui.environment_list import FILTERS, AuditItem, column, item_from_row, status_text
+from manutencao_pro.ui.motion import ProgressPulse, fade
+from manutencao_pro.ui.theme import apply_app_theme
 
 
 class EnvironmentWindow(Adw.Window):
     def __init__(self, parent: Gtk.Window | None, can_apply: Callable[[], str | None], *, autoload: bool = True) -> None:
         super().__init__(transient_for=parent, destroy_with_parent=True, title=_("Ambiente de desenvolvimento"))
+        self.add_css_class("mp-app")
+        apply_app_theme()
         self.set_default_size(960, 700)
         if parent is not None and parent.get_application() is not None:
             self.set_application(parent.get_application())
@@ -49,24 +61,34 @@ class EnvironmentWindow(Adw.Window):
         threading.Thread(target=self._load, args=(generation,), daemon=True).start()
 
     def display_snapshot(self, snapshot: EnvironmentSnapshot) -> None:
+        refreshing = self._list_revealer.get_reveal_child()
+        if refreshing:
+            self._view.set_opacity(0.45)
         self._snapshot = snapshot
         self._fill(snapshot)
         self._set_busy(False, status_text(snapshot, self._filtered.get_n_items()))
+        self._list_revealer.set_reveal_child(True)
+        self._choices_revealer.set_reveal_child(True)
+        if refreshing:
+            fade(self._view, 0.45, 1, 240)
 
     def _build(self) -> None:
-        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        page.set_margin_top(12)
-        page.set_margin_bottom(12)
-        page.set_margin_start(12)
-        page.set_margin_end(12)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, vexpand=True)
+        page.set_margin_top(16)
+        page.set_margin_bottom(16)
+        page.set_margin_start(16)
+        page.set_margin_end(16)
         page.append(self._build_filters())
         page.append(self._build_list())
         page.append(self._build_status())
+        page.append(self._build_choices())
         page.append(self._build_buttons())
         toolbar = Adw.ToolbarView()
         toolbar.add_top_bar(Adw.HeaderBar())
         toolbar.set_content(page)
-        self.set_content(toolbar)
+        self.toast = Adw.ToastOverlay()
+        self.toast.set_child(toolbar)
+        self.set_content(self.toast)
 
     def _build_filters(self) -> Gtk.Box:
         self.search = Gtk.SearchEntry(placeholder_text=_("Buscar pacote, repositório ou variável"), hexpand=True)
@@ -78,14 +100,15 @@ class EnvironmentWindow(Adw.Window):
         filters.append(self.category)
         return filters
 
-    def _build_list(self) -> Gtk.ScrolledWindow:
+    def _build_list(self) -> Gtk.Box:
         self._store = Gio.ListStore.new(AuditItem)
         self._filter = Gtk.CustomFilter.new(self._match_item)
         self._filtered = Gtk.FilterListModel(model=self._store, filter=self._filter)
         self._filtered.connect("items-changed", lambda *_args: self._on_items_changed())
         self._view = Gtk.ColumnView(model=Gtk.NoSelection(model=self._filtered))
-        self._view.set_show_row_separators(True)
-        self._view.set_show_column_separators(True)
+        self._view.add_css_class("mp-audit")
+        self._view.set_show_row_separators(False)
+        self._view.set_show_column_separators(False)
         for title, attribute in (
             (_("Categoria"), "category"),
             (_("Nome"), "name"),
@@ -98,29 +121,68 @@ class EnvironmentWindow(Adw.Window):
             vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
             vexpand=True,
         )
+        scroll.add_css_class("mp-card")
         scroll.set_child(self._view)
-        return scroll
+        self.pulse = Gtk.ProgressBar()
+        self.pulse.add_css_class("mp-pulse")
+        self.pulse.set_visible(False)
+        self._pulse = ProgressPulse(self.pulse)
+        self._list_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+            transition_duration=280,
+            vexpand=True,
+            child=scroll,
+        )
+        board = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, vexpand=True)
+        board.append(self.pulse)
+        board.append(self._list_revealer)
+        return board
 
     def _build_status(self) -> Gtk.Box:
-        self.spinner = Gtk.Spinner()
+        self.spinner = Adw.Spinner()
+        self.spinner.set_visible(False)
         self.status = Gtk.Label(xalign=0, hexpand=True, wrap=True)
         self.status.add_css_class("dim-label")
+        self.status.add_css_class("mp-mono")
         row = Gtk.Box(spacing=8)
         row.append(self.spinner)
         row.append(self.status)
         return row
 
+    def _build_choices(self) -> Gtk.Revealer:
+        self._choices = ExportChoices()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        caption = Gtk.Label(label=_("Incluir no backup"), xalign=0)
+        caption.add_css_class("mp-kicker")
+        caption.add_css_class("mp-mono")
+        box.append(caption)
+        box.append(self._choices)
+        self._choices_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN,
+            transition_duration=240,
+            child=box,
+        )
+        return self._choices_revealer
+
     def _build_buttons(self) -> Gtk.Box:
         self.refresh_button = Gtk.Button(label=_("Atualizar"))
+        self.refresh_button.add_css_class("pill")
+        self.copy_button = Gtk.Button(label=_("Copiar tudo"))
+        self.copy_button.add_css_class("pill")
         self.export_button = Gtk.Button(label=_("Exportar"))
+        self.export_button.add_css_class("pill")
         self.import_button = Gtk.Button(label=_("Importar"))
+        self.import_button.add_css_class("pill")
         self.import_button.add_css_class("suggested-action")
         self.refresh_button.connect("clicked", lambda *_args: self.refresh())
+        self.copy_button.connect("clicked", lambda *_args: self._copy_export())
         self.export_button.connect("clicked", lambda *_args: self._export())
         self.import_button.connect("clicked", lambda *_args: self._import())
+        self.copy_button.set_sensitive(False)
         self.export_button.set_sensitive(False)
         buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END)
         buttons.append(self.refresh_button)
+        buttons.append(self.copy_button)
         buttons.append(self.export_button)
         buttons.append(self.import_button)
         return buttons
@@ -176,15 +238,33 @@ class EnvironmentWindow(Adw.Window):
             return
         self.status.set_label(status_text(self._snapshot, self._filtered.get_n_items()))
 
+    def _export_snapshot(self) -> EnvironmentSnapshot | None:
+        if self._snapshot is None:
+            return None
+        selected = self._choices.selected()
+        if not selected:
+            self.toast.add_toast(Adw.Toast(title=_("Marque o que entra no backup"), timeout=3))
+            return None
+        return snapshot_for_export(self._snapshot, set(selected))
+
+    def _copy_export(self) -> None:
+        snapshot = self._export_snapshot()
+        display = self.get_display()
+        if snapshot is None or display is None:
+            return
+        display.get_clipboard().set(dumps_snapshot(snapshot))
+        self.toast.add_toast(Adw.Toast(title=_("Backup copiado"), timeout=2))
+
     def _export(self) -> None:
-        if self._snapshot is None or self._busy:
+        if self._snapshot is None or self._busy or self._export_snapshot() is None:
             return
         present_save_json(self, self._write_export)
 
     def _write_export(self, chosen: Gio.File) -> None:
-        if self._snapshot is None:
+        snapshot = self._export_snapshot()
+        if snapshot is None:
             return
-        data = dumps_snapshot(self._snapshot).encode("utf-8")
+        data = dumps_snapshot(snapshot).encode("utf-8")
         try:
             chosen.replace_contents(data, None, False, Gio.FileCreateFlags.REPLACE_DESTINATION, None)
         except GLib.Error as error:
@@ -284,10 +364,18 @@ class EnvironmentWindow(Adw.Window):
 
     def _set_busy(self, busy: bool, status: str) -> None:
         self._busy = busy
-        self.spinner.set_spinning(busy)
+        self.spinner.set_visible(busy)
+        self.pulse.set_visible(busy)
+        if busy:
+            self._pulse.start()
+        else:
+            self._pulse.stop()
+        ready = not busy and self._snapshot is not None
         self.refresh_button.set_sensitive(not busy and not self._importing)
-        self.export_button.set_sensitive(not busy and self._snapshot is not None)
+        self.copy_button.set_sensitive(ready)
+        self.export_button.set_sensitive(ready)
         self.import_button.set_sensitive(not busy and not self._importing)
+        self._choices.set_interactive(not busy and not self._importing)
         self.status.set_label(status)
 
     def _on_close_request(self, _window: Gtk.Window) -> bool:
@@ -298,6 +386,7 @@ class EnvironmentWindow(Adw.Window):
 
     def _mark_closed(self) -> None:
         self._closed = True
+        self._pulse.stop()
 
     def _inhibit(self) -> None:
         app = self.get_application()

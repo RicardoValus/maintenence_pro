@@ -15,7 +15,7 @@ class StartPage(Gtk.Box):
     def __init__(self, on_start: Callable[[], None], on_environment: Callable[[], None]) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._page = Adw.StatusPage(icon_name=APP_ID, title=_("Manutenção Pro"), vexpand=True)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, halign=Gtk.Align.CENTER)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, halign=Gtk.Align.CENTER)
         self.scenario = Gtk.DropDown.new_from_strings(
             [
                 _("Tudo certo"),

@@ -2,24 +2,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, GLib, Gtk
 
 from manutencao_pro.constants import RESULT_ORDER, result_title, state_label, status_label
 from manutencao_pro.i18n import _
 from manutencao_pro.state import RunModel, classify
+from manutencao_pro.ui.status_icon import StatusIcon
 
-_PAGE_ICONS = {
-    "ok": "object-select-symbolic",
-    "warning": "dialog-warning-symbolic",
-    "reboot": "system-reboot-symbolic",
-    "error": "dialog-error-symbolic",
-    "cancelled": "process-stop-symbolic",
-}
-_ROW_ICONS = {
-    "success": "object-select-symbolic",
-    "warning": "dialog-warning-symbolic",
-    "error": "dialog-error-symbolic",
-    "info": "dialog-information-symbolic",
+_PAGE_KINDS = {
+    "ok": "success",
+    "warning": "warning",
+    "reboot": "reboot",
+    "error": "error",
+    "cancelled": "cancelled",
 }
 
 
@@ -31,8 +26,9 @@ class ResultPage(Gtk.Box):
         on_again: Callable[[], None],
         on_reboot: Callable[[], None],
     ) -> None:
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=12, vexpand=True)
-        self.status_icon = Gtk.Image(pixel_size=28)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=16, vexpand=True)
+        self._generation = 0
+        self.status_icon = StatusIcon(pixel_size=28)
         self.status_title = Gtk.Label(halign=Gtk.Align.CENTER, justify=Gtk.Justification.CENTER, wrap=True)
         self.status_title.add_css_class("title-2")
         self.status_description = Gtk.Label(
@@ -42,7 +38,7 @@ class ResultPage(Gtk.Box):
             max_width_chars=42,
         )
         self.status_description.add_css_class("dim-label")
-        header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER)
+        header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER)
         header.append(self.status_icon)
         header.append(self.status_title)
         header.append(self.status_description)
@@ -74,27 +70,36 @@ class ResultPage(Gtk.Box):
         self.append(self.buttons)
 
     def show_model(self, model: RunModel) -> None:
-        self.status_icon.set_from_icon_name(_PAGE_ICONS.get(model.status, "dialog-information-symbolic"))
+        self._generation += 1
+        generation = self._generation
         self.status_title.set_label(_heading(model.status))
         self.status_description.set_label(_description(model))
+        kind = _PAGE_KINDS.get(model.status, "info")
+        GLib.timeout_add(60, self._present_later, generation, self.status_icon, kind)
+        self._rebuild(model, generation)
+        self.reboot_button.set_visible(bool(model.reboot_reasons))
+
+    def _rebuild(self, model: RunModel, generation: int) -> None:
         for row in self._rows:
             self.group.remove(row)
         self._rows.clear()
+        index = 0
         for key in RESULT_ORDER:
             if key not in model.results:
                 continue
             state = model.results[key]
-            kind = classify(key, state)
             row = Adw.ActionRow(title=result_title(key), subtitle=state_label(state))
-            row.add_suffix(
-                Gtk.Image(
-                    icon_name=_ROW_ICONS.get(kind, "dialog-information-symbolic"),
-                    pixel_size=16,
-                )
-            )
+            icon = StatusIcon()
+            row.add_suffix(icon)
             self.group.add(row)
             self._rows.append(row)
-        self.reboot_button.set_visible(bool(model.reboot_reasons))
+            GLib.timeout_add(90 + index * 36, self._present_later, generation, icon, classify(key, state))
+            index += 1
+
+    def _present_later(self, generation: int, icon: StatusIcon, kind: str) -> bool:
+        if generation == self._generation:
+            icon.present(kind)
+        return False
 
 
 def summary_text(model: RunModel) -> str:
@@ -139,4 +144,3 @@ def _button(label: str, style: str | None, callback: Callable[[], None]) -> Gtk.
         button.add_css_class(style)
     button.connect("clicked", lambda *_args: callback())
     return button
-
