@@ -1,6 +1,15 @@
 # Manutenção Pro
 
-Interface gráfica para a manutenção diária do Debian 13 (GNOME 48): pacotes, DKMS, microcode, firmware e driver NVIDIA. O script `maintenence_pro.sh` continua sendo a fonte de verdade e ainda roda sozinho no terminal.
+Interface gráfica para a manutenção diária: pacotes, DKMS, microcode, firmware e driver NVIDIA. O script `maintenence_pro.sh` continua sendo a fonte de verdade e ainda roda sozinho no terminal.
+
+**Sistemas suportados**
+
+| Distro | Desktop | NVIDIA |
+| --- | --- | --- |
+| Debian 13 | GNOME | Completo (repo + instalador `.run` da NVIDIA.com quando necessário) |
+| Pop!_OS 24.04 | COSMIC | Somente leitura: `nvidia-smi` / pacotes `nvidia-driver*`; atualização via apt ou COSMIC Store. Sem `.run`, sem `xorg.conf`, sem blacklist nouveau nem link GLX |
+
+A detecção usa `/etc/os-release` (`ID`, `ID_LIKE`, `VERSION_ID`) e escolhe um perfil de distro (`manutencao_pro.distro`). No Pop!_OS o driver NVIDIA é tratado como gerenciado pelo sistema.
 
 O código fica em [github.com/RicardoValus/maintenence_pro](https://github.com/RicardoValus/maintenence_pro), sob a licença MIT. O autor é Ricardo Medlo Valus.
 
@@ -9,7 +18,7 @@ O código fica em [github.com/RicardoValus/maintenence_pro](https://github.com/R
 Na pasta do projeto, depois de gerar o pacote:
 
 ```bash
-sudo apt install ./manutencao-pro_1.0.9_all.deb
+sudo apt install ./manutencao-pro_1.0.10_all.deb
 ```
 
 O aplicativo aparece na busca das Atividades como **Manutenção Pro** e pode ser fixado no dock. A ação **Executar agora** abre a janela e inicia a manutenção.
@@ -26,7 +35,7 @@ Atalhos da janela: Ctrl+Enter inicia, Ctrl+L mostra ou oculta o log, Ctrl+Q sai.
 
 ## Atalho global
 
-É configuração do seu usuário. Não entra na instalação do pacote.
+É configuração do seu usuário. Não entra na instalação do pacote. Só funciona no **GNOME** (schemas do gsettings). No **COSMIC** (Pop!_OS 24.04) o comando avisa que o atalho global está indisponível por enquanto e não altera nada.
 
 ```bash
 manutencao-pro-instalar-atalho
@@ -91,7 +100,7 @@ sudo apt install meson ninja-build debhelper dh-python
 dpkg-buildpackage -us -uc -b
 ```
 
-O arquivo gerado é `manutencao-pro_1.0.9_all.deb`.
+O arquivo gerado é `manutencao-pro_1.0.10_all.deb`.
 
 ## O que o script faz
 
@@ -107,10 +116,9 @@ O arquivo gerado é `manutencao-pro_1.0.9_all.deb`.
 
 **3. GPU NVIDIA**
 - DKMS: confere o módulo do kernel atual e recompila se precisar.
-- Driver no repositório. Se a NVIDIA.com tiver versão mais nova, baixa o instalador oficial, instala e grava `/etc/X11/xorg.conf` para o GDM abrir depois do reinício. A sessão gráfica segue no driver atual até reiniciar.
-- Blacklist do nouveau.
-- Link GLX (`libglxserver_nvidia.so`).
-- Renderização GLX com `glxinfo`, para não cair no Mesa.
+- **Debian:** driver no repositório; se a NVIDIA.com tiver versão mais nova, baixa o instalador oficial, instala e grava `/etc/X11/xorg.conf` para o GDM. Também trata blacklist do nouveau e o link GLX (`libglxserver_nvidia.so`).
+- **Pop!_OS:** só lê o estado (`nvidia-smi`, pacotes `nvidia-driver*`) e, se houver update no apt, sugere `apt upgrade` ou a COSMIC Store. Não baixa `.run`, não altera `xorg.conf`, nouveau nem link GLX (loga o motivo e segue).
+- Renderização GLX com `glxinfo`. No Pop, falha sob XWayland não é tratada como driver morto.
 
 **4. Microcode e firmware**
 - Confere o microcode da CPU.

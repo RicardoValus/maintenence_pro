@@ -1,3 +1,10 @@
+manutencao-pro (1.0.10) unstable; urgency=medium
+
+  * Adiciona perfil de distro para Pop!_OS 24.04 (NVIDIA gerenciada pelo sistema).
+  * Mantém o comportamento completo no Debian 13.
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Mon, 19 Oct 2026 11:05:00 -0300
+
 manutencao-pro (1.0.9) unstable; urgency=medium
 
   * Lê o npm do nvm mesmo quando o node não está no PATH da sessão.

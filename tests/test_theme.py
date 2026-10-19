@@ -78,8 +78,8 @@ class ThemeLoadTest(unittest.TestCase):
         self.assertEqual(errors, [])
         apply_app_theme()
         display = Gdk.Display.get_default()
-        self.assertIsNotNone(display)
-        assert display is not None
+        if display is None:
+            self.skipTest("sem display gráfico (build headless)")
         theme = Gtk.IconTheme.get_for_display(display)
         root = project_root()
         assert root is not None

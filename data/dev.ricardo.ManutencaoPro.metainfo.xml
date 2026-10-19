@@ -4,9 +4,10 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Manutenção Pro</name>
-  <summary>Manutenção diária do Debian</summary>
+  <summary>Manutenção diária do Debian e do Pop!_OS</summary>
   <description>
     <p>Atualiza pacotes, verifica DKMS, microcode, firmware e o driver NVIDIA, e informa se o sistema precisa reiniciar.</p>
+    <p>Suporta Debian 13 (GNOME) e Pop!_OS 24.04 (COSMIC). No Pop!_OS o driver NVIDIA é gerenciado pelo sistema (apt / COSMIC Store); a manutenção não instala o instalador .run da NVIDIA.com.</p>
   </description>
   <url type="homepage">https://github.com/RicardoValus/maintenence_pro</url>
   <launchable type="desktop-id">dev.ricardo.ManutencaoPro.desktop</launchable>
@@ -24,6 +25,7 @@
   </keywords>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.10" date="2026-10-19"/>
     <release version="1.0.9" date="2026-10-13"/>
     <release version="1.0.8" date="2026-10-13"/>
     <release version="1.0.7" date="2026-10-13"/>

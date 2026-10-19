@@ -5,6 +5,7 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 from manutencao_pro import __version__
+from manutencao_pro.distro import detect_profile
 from manutencao_pro.i18n import _
 from manutencao_pro.paths import shortcuts_ui
 
@@ -103,6 +104,6 @@ def present_about(parent: Gtk.Window) -> None:
         copyright="© 2026 Ricardo Medlo Valus",
         website="https://github.com/RicardoValus/maintenence_pro",
         license_type=Gtk.License.MIT_X11,
-        comments=_("Manutenção diária do Debian: pacotes, DKMS, microcode, firmware e driver NVIDIA."),
+        comments=_(detect_profile().about_summary),
     )
     dialog.present(parent)

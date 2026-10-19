@@ -1,6 +1,6 @@
-.TH MANUTENCAO-PRO 1 "outubro de 2026" "1.0.9" "Manutenção Pro"
+.TH MANUTENCAO-PRO 1 "outubro de 2026" "1.0.10" "Manutenção Pro"
 .SH NOME
-manutencao-pro \- manutenção diária do Debian
+manutencao-pro \- manutenção diária do Debian e do Pop!_OS
 .SH SINOPSE
 .B manutencao-pro
 [\fB\-\-demo\fR]
@@ -8,6 +8,7 @@ manutencao-pro \- manutenção diária do Debian
 [\fB\-\-run\fR]
 .SH DESCRIÇÃO
 Interface gráfica para a manutenção diária: pacotes, DKMS, microcode, firmware e driver NVIDIA.
+Suporta Debian 13 e Pop!_OS 24.04; neste último a NVIDIA é só consultada (gerenciada pelo sistema).
 A execução real pede autorização pelo polkit e roda uma cópia do script em /usr/libexec.
 .SH OPÇÕES
 .TP

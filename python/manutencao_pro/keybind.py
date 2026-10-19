@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 
 from gi.repository import Gio
+
+from manutencao_pro.distro import desktop_environment
 
 SCHEMA = "org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_SCHEMA = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding"
@@ -10,6 +13,7 @@ COMMAND = "manutencao-pro --run"
 BINDING_NAME = "Manutenção Pro"
 CANDIDATES = ("<Ctrl><Alt>m", "<Ctrl><Alt>comma", "<Ctrl><Alt>period", "<Ctrl><Shift>m")
 _KNOWN_COMMANDS = frozenset({COMMAND, "manutencao-pro"})
+_COSMIC_MESSAGE = "Atalho global indisponível neste desktop por enquanto."
 
 
 def normalize(binding: str) -> str:
@@ -25,7 +29,9 @@ def choose_binding(used: set[str]) -> str | None:
     return None
 
 
-def install_shortcut() -> int:
+def install_shortcut(environ: Mapping[str, str] | None = None) -> int:
+    if not _desktop_allows_keybind(environ):
+        return 1
     settings = _settings()
     if settings is None:
         return 1
@@ -51,7 +57,9 @@ def install_shortcut() -> int:
     return 0
 
 
-def remove_shortcut() -> int:
+def remove_shortcut(environ: Mapping[str, str] | None = None) -> int:
+    if not _desktop_allows_keybind(environ):
+        return 1
     settings = _settings()
     if settings is None:
         return 1
@@ -73,6 +81,13 @@ def remove_shortcut() -> int:
     else:
         print("Nenhum atalho da Manutenção Pro estava configurado.")
     return 0
+
+
+def _desktop_allows_keybind(environ: Mapping[str, str] | None) -> bool:
+    if desktop_environment(environ) == "cosmic":
+        print(_COSMIC_MESSAGE, file=sys.stderr)
+        return False
+    return True
 
 
 def _settings() -> Gio.Settings | None:

@@ -16,6 +16,44 @@ GLX_RENDER_STATE="skip"
 REBOOT_REASONS=""
 WARNINGS=""
 MAINT_TOTAL_STEPS=14
+
+load_distro_profile() {
+    local exports
+    if [ -n "${MAINT_PROFILE_KEY:-}" ] && [ -n "${MAINT_NVIDIA_STRATEGY:-}" ]; then
+        return 0
+    fi
+    exports=$(
+        MAINT_OS_RELEASE="${MAINT_OS_RELEASE:-/etc/os-release}" python3 -c \
+            'from manutencao_pro.distro import shell_exports_from_environ; print(shell_exports_from_environ(), end="")' \
+            2>/dev/null
+    ) || exports=""
+    if [ -n "$exports" ]; then
+        eval "$exports"
+        return 0
+    fi
+    MAINT_PROFILE_KEY="${MAINT_PROFILE_KEY:-debian}"
+    MAINT_PROFILE_NAME="${MAINT_PROFILE_NAME:-Debian}"
+    MAINT_EXPECTED_DESKTOP="${MAINT_EXPECTED_DESKTOP:-gnome}"
+    MAINT_NVIDIA_STRATEGY="${MAINT_NVIDIA_STRATEGY:-full}"
+    MAINT_MANAGES_XORG_CONF="${MAINT_MANAGES_XORG_CONF:-1}"
+    MAINT_MANAGES_NOUVEAU="${MAINT_MANAGES_NOUVEAU:-1}"
+    MAINT_MANAGES_GLX_LINK="${MAINT_MANAGES_GLX_LINK:-1}"
+    MAINT_GLX_FATAL_ON_XWAYLAND="${MAINT_GLX_FATAL_ON_XWAYLAND:-1}"
+}
+
+is_xwayland_session() {
+    [ -n "${DISPLAY:-}" ] && [ -n "${WAYLAND_DISPLAY:-}" ]
+}
+
+glx_mismatch_is_fatal() {
+    if [ "${MAINT_GLX_FATAL_ON_XWAYLAND:-1}" != "1" ] && is_xwayland_session; then
+        return 1
+    fi
+    return 0
+}
+
+load_distro_profile
+
 gui_warn() {
     if [ "${MAINT_GUI:-}" = "1" ]; then
         printf '%s\n' "@@WARN $1"
@@ -213,6 +251,10 @@ nvidia_xorg_ready() {
     grep -q 'Driver[[:space:]]*"nvidia"' "$conf"
 }
 ensure_nvidia_xorg() {
+    if [ "${MAINT_MANAGES_XORG_CONF:-1}" != "1" ]; then
+        echo "ℹ️  xorg.conf / nvidia-xconfig: não aplicável em ${MAINT_PROFILE_NAME} (display gerenciado pelo sistema)."
+        return 0
+    fi
     if nvidia_xorg_ready; then
         echo "✅ Xorg já aponta para o driver NVIDIA."
         return 0
@@ -241,6 +283,12 @@ nvidia_waiting_reboot() {
 }
 install_nvidia_upstream() {
     local latest="$1" url="$2" dest
+    if [ "${MAINT_NVIDIA_STRATEGY:-full}" = "system_managed" ]; then
+        NV_UP_STATE="skip"
+        echo "ℹ️  Instalação via NVIDIA.com (.run) desabilitada em ${MAINT_PROFILE_NAME}."
+        echo "   O driver é gerenciado pelo sistema (apt / COSMIC Store)."
+        return 0
+    fi
     if ! nvidia_url_ok "$url" "$latest"; then
         NV_UP_STATE="fail"
         echo "⚠️  URL do driver NVIDIA recusada."
@@ -291,8 +339,33 @@ nvidia_ver_gt() {
     [ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] &&
         [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
 }
+report_nvidia_system_managed() {
+    local ativo="$1"
+    NV_UP_STATE="skip"
+    echo "ℹ️  NVIDIA gerenciada pelo sistema (${MAINT_PROFILE_NAME})."
+    echo "   Driver ativo (nvidia-smi): ${ativo:-desconhecido}"
+    if [ -n "${NVIDIA_PKG:-}" ]; then
+        echo "   Pacote: $NVIDIA_PKG"
+    else
+        echo "   Pacotes nvidia-driver* encontrados via dpkg:"
+        dpkg -l | grep -E '^ii[[:space:]]+nvidia-driver' || echo "   (nenhum)"
+    fi
+    if [ "$NV_REPO_STATE" = "outdated" ]; then
+        echo "   Há atualização nos repositórios. Sugestão:"
+        echo "   sudo apt update && sudo apt upgrade"
+        echo "   Ou use a COSMIC Store."
+        append_warn "NVIDIA: atualização disponível via apt / COSMIC Store"
+    else
+        echo "   Sem instalação via NVIDIA.com (.run) neste perfil."
+    fi
+}
+
 report_nvidia_upstream() {
     local ativo="$1" latest
+    if [ "${MAINT_NVIDIA_STRATEGY:-full}" = "system_managed" ]; then
+        report_nvidia_system_managed "$ativo"
+        return
+    fi
     if ! fetch_nvidia_unix_versions; then
         NV_UP_STATE="fail"
         echo "ℹ️  Não foi possível consultar a versão mais nova da NVIDIA (fora do repo)."
@@ -465,9 +538,13 @@ fi
 
 gui_step 10 nvidia "Verificando driver NVIDIA"
 echo "🎮 Verificando versão do driver NVIDIA..."
+echo "   Perfil: ${MAINT_PROFILE_NAME} (estratégia NVIDIA: ${MAINT_NVIDIA_STRATEGY})"
 if command -v nvidia-smi &> /dev/null; then
     DRIVER_ATIVO=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)
-    NVIDIA_PKG=$(dpkg -l | awk '/^ii\s+(nvidia-driver|nvidia-open)\s/{print $2; exit}')
+    NVIDIA_PKG=$(dpkg -l | awk '/^ii[[:space:]]+nvidia-(driver|open)([.-]|$|[[:space:]])/{print $2; exit}')
+    if [ -z "$NVIDIA_PKG" ]; then
+        NVIDIA_PKG=$(dpkg -l | awk '/^ii[[:space:]]+nvidia-driver/{print $2; exit}')
+    fi
     if [ -n "$NVIDIA_PKG" ]; then
         NV_INSTALLED=$(apt-cache policy "$NVIDIA_PKG" 2>/dev/null | awk '/Installed:/{print $2}')
         NV_CANDIDATE=$(apt-cache policy "$NVIDIA_PKG" 2>/dev/null | awk '/Candidate:/{print $2}')
@@ -497,7 +574,10 @@ fi
 
 gui_step 11 nouveau "Verificando blacklist do nouveau"
 echo "🚫 Verificando blacklist do driver nouveau..."
-if command -v nvidia-smi &> /dev/null; then
+if [ "${MAINT_MANAGES_NOUVEAU:-1}" != "1" ]; then
+    NOUVEAU_STATE="skip"
+    echo "ℹ️  Blacklist do nouveau: não aplicável em ${MAINT_PROFILE_NAME} (gerenciado pelo sistema)."
+elif command -v nvidia-smi &> /dev/null; then
     BLACKLIST_FILE="/etc/modprobe.d/blacklist-nouveau.conf"
     if [ ! -f "$BLACKLIST_FILE" ] || ! grep -q "^blacklist nouveau" "$BLACKLIST_FILE" 2>/dev/null; then
         echo "⚠️  Blacklist do nouveau ausente/incompleta. Criando $BLACKLIST_FILE..."
@@ -519,7 +599,10 @@ fi
 
 gui_step 12 glx-link "Verificando link do GLX"
 echo "🔗 Verificando link simbólico do GLX da NVIDIA (libglxserver_nvidia.so)..."
-if command -v nvidia-smi &> /dev/null; then
+if [ "${MAINT_MANAGES_GLX_LINK:-1}" != "1" ]; then
+    GLX_LINK_STATE="skip"
+    echo "ℹ️  Link libglxserver_nvidia.so: não aplicável em ${MAINT_PROFILE_NAME} (stack NVIDIA do sistema)."
+elif command -v nvidia-smi &> /dev/null; then
     GLX_VERSIONED=$(find /usr/lib -iname "libglxserver_nvidia.so.*" 2>/dev/null | sort -V | tail -1)
     if [ -z "$GLX_VERSIONED" ]; then
         GLX_LINK_STATE="missing"
@@ -552,8 +635,13 @@ if command -v glxinfo &> /dev/null && [ -n "$DISPLAY" ]; then
     else
         GLX_RENDER_STATE="wrong"
         echo "🚨 GLX NÃO está usando a NVIDIA (renderizador atual: $GL_RENDERER)."
-        echo "   Sintoma das janelas transparentes. Confira o link GLX e: sudo grep -iE \"EE|WW\" /var/log/Xorg.0.log | tail -30"
-        append_reboot "GLX não está na NVIDIA"
+        if glx_mismatch_is_fatal; then
+            echo "   Sintoma das janelas transparentes. Confira o link GLX e: sudo grep -iE \"EE|WW\" /var/log/Xorg.0.log | tail -30"
+            append_reboot "GLX não está na NVIDIA"
+        else
+            echo "   Sessão XWayland detectada: isso não indica driver NVIDIA morto em ${MAINT_PROFILE_NAME}."
+            append_warn "GLX via XWayland sem NVIDIA (esperado em Wayland; não tratado como falha de driver)"
+        fi
     fi
 elif command -v nvidia-smi &> /dev/null; then
     GLX_RENDER_STATE="no_display"

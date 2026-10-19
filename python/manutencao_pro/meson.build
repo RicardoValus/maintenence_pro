@@ -25,3 +25,4 @@ py.install_sources(
 )
 
 subdir('ui')
+subdir('distro')
