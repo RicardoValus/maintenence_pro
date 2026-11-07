@@ -17,10 +17,11 @@ _STEPS = (
     (8, "microcode", "Verificando microcode do processador"),
     (9, "firmware", "Verificando firmware do chipset"),
     (10, "nvidia", "Verificando driver NVIDIA"),
-    (11, "nouveau", "Verificando blacklist do nouveau"),
-    (12, "glx-link", "Verificando link do GLX"),
-    (13, "glx-render", "Verificando renderização GLX"),
-    (14, "conferencia", "Conferência final"),
+    (11, "nvidia-vulkan", "Limpando leftovers Vulkan NVIDIA (.run)"),
+    (12, "nouveau", "Verificando blacklist do nouveau"),
+    (13, "glx-link", "Verificando link do GLX"),
+    (14, "glx-render", "Verificando renderização GLX"),
+    (15, "conferencia", "Conferência final"),
 )
 
 
@@ -28,8 +29,9 @@ def lines_for(scenario: str) -> list[str]:
     if scenario not in SCENARIOS:
         raise ValueError(scenario)
     rows: list[str] = []
+    total = len(_STEPS)
     for index, step_id, title in _STEPS:
-        rows.append(f"@@STEP {index}/14 {step_id} {title}")
+        rows.append(f"@@STEP {index}/{total} {step_id} {title}")
         rows.extend(_step_lines(scenario, step_id))
     return rows
 
@@ -98,6 +100,7 @@ def _final_lines(scenario: str) -> list[str]:
             "@@RESULT firmware=ok",
             "@@RESULT nvidia_repo=ok",
             "@@RESULT nvidia_upstream=ok",
+            "@@RESULT nvidia_vulkan=ok",
             "@@RESULT nouveau=ok",
             "@@RESULT glx_link=ok",
             "@@RESULT glx_render=ok",
@@ -115,6 +118,7 @@ def _final_lines(scenario: str) -> list[str]:
             "@@RESULT nvidia_repo=ok",
             "⚠️  Driver NVIDIA na NVIDIA.com",
             "@@RESULT nvidia_upstream=newer",
+            "@@RESULT nvidia_vulkan=ok",
             "@@RESULT nouveau=ok",
             "@@RESULT glx_link=ok",
             "@@RESULT glx_render=ok",
@@ -133,6 +137,7 @@ def _final_lines(scenario: str) -> list[str]:
             "@@RESULT firmware=ok",
             "@@RESULT nvidia_repo=ok",
             "@@RESULT nvidia_upstream=ok",
+            "@@RESULT nvidia_vulkan=ok",
             "@@RESULT nouveau=ok",
             "@@RESULT glx_link=ok",
             "@@RESULT glx_render=ok",
@@ -150,6 +155,7 @@ def _final_lines(scenario: str) -> list[str]:
         "@@RESULT firmware=ok",
         "@@RESULT nvidia_repo=ok",
         "@@RESULT nvidia_upstream=ok",
+        "@@RESULT nvidia_vulkan=ok",
         "@@RESULT nouveau=ok",
         "@@RESULT glx_link=ok",
         "@@RESULT glx_render=ok",

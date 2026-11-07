@@ -18,7 +18,7 @@ O código fica em [github.com/RicardoValus/maintenence_pro](https://github.com/R
 Na pasta do projeto, depois de gerar o pacote:
 
 ```bash
-sudo apt install ./manutencao-pro_1.0.10_all.deb
+sudo apt install ./manutencao-pro_1.0.11_all.deb
 ```
 
 O aplicativo aparece na busca das Atividades como **Manutenção Pro** e pode ser fixado no dock. A ação **Executar agora** abre a janela e inicia a manutenção.
@@ -100,7 +100,7 @@ sudo apt install meson ninja-build debhelper dh-python
 dpkg-buildpackage -us -uc -b
 ```
 
-O arquivo gerado é `manutencao-pro_1.0.10_all.deb`.
+O arquivo gerado é `manutencao-pro_1.0.11_all.deb`.
 
 ## O que o script faz
 
@@ -117,6 +117,7 @@ O arquivo gerado é `manutencao-pro_1.0.10_all.deb`.
 **3. GPU NVIDIA**
 - DKMS: confere o módulo do kernel atual e recompila se precisar.
 - **Debian:** driver no repositório; se a NVIDIA.com tiver versão mais nova, baixa o instalador oficial, instala e grava `/etc/X11/xorg.conf` para o GDM. Também trata blacklist do nouveau e o link GLX (`libglxserver_nvidia.so`).
+- **Vulkan ICD:** remove leftovers do instalador `.run` em `/etc/vulkan` quando o ICD do apt em `/usr/share/vulkan` está presente, evitando GPU duplicada (`GetAdapterInfo` em jogos via Proton).
 - **Pop!_OS:** só lê o estado (`nvidia-smi`, pacotes `nvidia-driver*`) e, se houver update no apt, sugere `apt upgrade` ou a COSMIC Store. Não baixa `.run`, não altera `xorg.conf`, nouveau nem link GLX (loga o motivo e segue).
 - Renderização GLX com `glxinfo`. No Pop, falha sob XWayland não é tratada como driver morto.
 

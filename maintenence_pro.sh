@@ -10,12 +10,13 @@ MC_STATE="skip"
 FW_STATE="skip"
 NV_REPO_STATE="skip"
 NV_UP_STATE="skip"
+NV_VULKAN_STATE="skip"
 NOUVEAU_STATE="skip"
 GLX_LINK_STATE="skip"
 GLX_RENDER_STATE="skip"
 REBOOT_REASONS=""
 WARNINGS=""
-MAINT_TOTAL_STEPS=14
+MAINT_TOTAL_STEPS=15
 
 load_distro_profile() {
     local exports
@@ -390,6 +391,119 @@ report_nvidia_upstream() {
         echo "ℹ️  Driver ativo ($ativo) está à frente da página Unix da NVIDIA ($latest)."
     fi
 }
+is_dpkg_owned() {
+    dpkg -S "$1" >/dev/null 2>&1
+}
+clean_nvidia_vulkan_leftovers() {
+    local ativo="$1"
+    local cleaned=0
+    local f ver path
+    local has_pkg_icd=0
+    local -a vulkan_jsons orphan_bins
+
+    [ -e /usr/share/vulkan/icd.d/nvidia_icd.json ] && has_pkg_icd=1
+
+    vulkan_jsons=(
+        /etc/vulkan/icd.d/nvidia_icd.json
+        /etc/vulkan/implicit_layer.d/nvidia_layers.json
+        /etc/vulkan/explicit_layer.d/nvidia_layers.json
+    )
+    if [ "$has_pkg_icd" -eq 1 ]; then
+        for f in "${vulkan_jsons[@]}"; do
+            if [ -e "$f" ] && ! is_dpkg_owned "$f"; then
+                echo "⚠️  Removendo leftover Vulkan do .run (conflita com ICD do apt): $f"
+                sudo rm -f "$f"
+                cleaned=1
+            fi
+        done
+    else
+        for f in "${vulkan_jsons[@]}"; do
+            [ -e "$f" ] || continue
+            is_dpkg_owned "$f" && continue
+            if grep -qE 'libnvidia-present\.so\.[0-9]' "$f" 2>/dev/null; then
+                local ref
+                ref=$(sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*libnvidia-present\.so\.[0-9.]*\)".*/\1/p' "$f" | head -1)
+                if [ -n "$ref" ] && ! ldconfig -p 2>/dev/null | grep -qF "$ref" && [ ! -e "/usr/lib/x86_64-linux-gnu/$ref" ] && [ ! -e "/usr/lib/$ref" ]; then
+                    echo "⚠️  Removendo layer Vulkan quebrada (lib ausente: $ref): $f"
+                    sudo rm -f "$f"
+                    cleaned=1
+                fi
+            fi
+        done
+    fi
+
+    if [ "$has_pkg_icd" -eq 1 ]; then
+        orphan_bins=(
+            /usr/bin/nvidia-installer
+            /usr/bin/nvidia-uninstall
+        )
+        for f in "${orphan_bins[@]}"; do
+            if [ -e "$f" ] && ! is_dpkg_owned "$f"; then
+                echo "⚠️  Removendo binário órfão do instalador .run: $f"
+                sudo rm -f "$f"
+                cleaned=1
+            fi
+        done
+    fi
+
+    if [ -n "$ativo" ] && [ "$has_pkg_icd" -eq 1 ]; then
+        while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            is_dpkg_owned "$path" && continue
+            ver=$(printf '%s' "$path" | sed -n 's/.*\.\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
+            [ -z "$ver" ] && continue
+            [ "$ver" = "$ativo" ] && continue
+            echo "⚠️  Removendo lib órfã NVIDIA $ver (ativo $ativo): $path"
+            sudo rm -f "$path"
+            cleaned=1
+        done < <(find /usr/lib/x86_64-linux-gnu /usr/lib/i386-linux-gnu /usr/lib/xorg/modules/extensions \
+            \( -name 'libGLX_nvidia.so.*' -o -name 'libEGL_nvidia.so.*' -o -name 'libnvidia-*.so.*' \
+               -o -name 'libcuda.so.*' -o -name 'libnvcuvid.so.*' -o -name 'libnvoptix.so.*' \
+               -o -name 'libGLESv*_nvidia.so.*' -o -name 'libglxserver_nvidia.so.*' \
+               -o -name 'libvdpau_nvidia.so.*' \) 2>/dev/null)
+
+        while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            ver=$(basename "$path")
+            ver=${ver#nvidia-}
+            [ "$ver" = "$ativo" ] && continue
+            case "$ver" in
+                [0-9]*.[0-9]*.[0-9]*) ;;
+                *) continue ;;
+            esac
+            if [ -d "$path" ] && ! is_dpkg_owned "$path"; then
+                echo "⚠️  Removendo firmware/src órfão NVIDIA $ver: $path"
+                sudo rm -rf "$path"
+                cleaned=1
+            fi
+        done < <(find /usr/lib/firmware/nvidia /usr/src -mindepth 1 -maxdepth 1 -type d \( -name '[0-9]*.[0-9]*.[0-9]*' -o -name 'nvidia-[0-9]*.[0-9]*.[0-9]*' \) 2>/dev/null)
+    fi
+
+    if [ "$cleaned" -eq 1 ]; then
+        sudo ldconfig
+        NV_VULKAN_STATE="fixed"
+        echo "✅ Leftovers NVIDIA/.run limpos (Vulkan ICD)."
+    else
+        NV_VULKAN_STATE="ok"
+        echo "✅ Sem leftovers NVIDIA/.run conflitantes com o ICD do apt."
+    fi
+
+    if command -v vulkaninfo >/dev/null 2>&1; then
+        local nv_count
+        nv_count=$(vulkaninfo --summary 2>/dev/null | awk '
+            /^GPU[0-9]+:/ {gpu=1; next}
+            gpu && /deviceName/ && /NVIDIA/ && /GeForce|RTX|GTX|Quadro|Tesla/ {c++; gpu=0}
+            END {print c+0}
+        ')
+        if [ "${nv_count:-0}" -gt 1 ]; then
+            NV_VULKAN_STATE="broken"
+            echo "🚨 Vulkan ainda lista $nv_count GPUs NVIDIA (duplicata). Jogos podem falhar com GetAdapterInfo."
+            append_warn "Vulkan: $nv_count GPUs NVIDIA duplicadas"
+        elif [ "$NV_VULKAN_STATE" = "ok" ] || [ "$NV_VULKAN_STATE" = "fixed" ]; then
+            echo "✅ Vulkan: uma GPU NVIDIA (sem duplicata de ICD)."
+        fi
+    fi
+}
 print_item() {
     case "$1" in
         skip|"") return ;;
@@ -419,6 +533,8 @@ print_final_report() {
     gui_result_if_set "$NV_REPO_STATE" "nvidia_repo"
     print_item "$NV_UP_STATE" "Driver NVIDIA na NVIDIA.com"
     gui_result_if_set "$NV_UP_STATE" "nvidia_upstream"
+    print_item "$NV_VULKAN_STATE" "Vulkan ICD NVIDIA (sem leftovers .run)"
+    gui_result_if_set "$NV_VULKAN_STATE" "nvidia_vulkan"
     print_item "$NOUVEAU_STATE" "Blacklist nouveau"
     gui_result_if_set "$NOUVEAU_STATE" "nouveau"
     print_item "$GLX_LINK_STATE" "Link GLX"
@@ -572,7 +688,19 @@ if grep -qiE "^(Inst|Conf) (nvidia-driver|nvidia-open|nvidia-kernel)" "$UPGRADE_
     append_reboot "driver NVIDIA atualizado"
 fi
 
-gui_step 11 nouveau "Verificando blacklist do nouveau"
+gui_step 11 nvidia-vulkan "Limpando leftovers Vulkan NVIDIA (.run)"
+echo "🧹 Verificando leftovers do instalador .run da NVIDIA (Vulkan ICD)..."
+if command -v nvidia-smi &> /dev/null || [ -e /usr/share/vulkan/icd.d/nvidia_icd.json ] || [ -e /etc/vulkan/icd.d/nvidia_icd.json ]; then
+    if [ -z "${DRIVER_ATIVO:-}" ] && command -v nvidia-smi &> /dev/null; then
+        DRIVER_ATIVO=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
+    fi
+    clean_nvidia_vulkan_leftovers "$DRIVER_ATIVO"
+else
+    NV_VULKAN_STATE="skip"
+    echo "ℹ️  NVIDIA não detectada — pulando limpeza de Vulkan ICD."
+fi
+
+gui_step 12 nouveau "Verificando blacklist do nouveau"
 echo "🚫 Verificando blacklist do driver nouveau..."
 if [ "${MAINT_MANAGES_NOUVEAU:-1}" != "1" ]; then
     NOUVEAU_STATE="skip"
@@ -597,7 +725,7 @@ elif command -v nvidia-smi &> /dev/null; then
     fi
 fi
 
-gui_step 12 glx-link "Verificando link do GLX"
+gui_step 13 glx-link "Verificando link do GLX"
 echo "🔗 Verificando link simbólico do GLX da NVIDIA (libglxserver_nvidia.so)..."
 if [ "${MAINT_MANAGES_GLX_LINK:-1}" != "1" ]; then
     GLX_LINK_STATE="skip"
@@ -625,7 +753,7 @@ elif command -v nvidia-smi &> /dev/null; then
     fi
 fi
 
-gui_step 13 glx-render "Verificando renderização GLX"
+gui_step 14 glx-render "Verificando renderização GLX"
 echo "🖥️  Verificando se o GLX está renderizando com a NVIDIA (e não caindo pro Mesa/swrast)..."
 if command -v glxinfo &> /dev/null && [ -n "$DISPLAY" ]; then
     GL_RENDERER=$(glxinfo 2>/dev/null | grep "OpenGL renderer")
@@ -653,6 +781,6 @@ if [ "$KERNEL_ANTES" != "$KERNEL_NOVO" ]; then
     append_reboot "kernel atualizado ($KERNEL_ANTES → $KERNEL_NOVO)"
 fi
 
-gui_step 14 conferencia "Conferência final"
+gui_step 15 conferencia "Conferência final"
 print_final_report
 echo "✅ Manutenção concluída!"
