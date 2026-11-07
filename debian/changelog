@@ -1,3 +1,10 @@
+manutencao-pro (1.0.12) unstable; urgency=medium
+
+  * Não remove libs EGL (gbm/wayland) ao limpar leftovers NVIDIA.
+  * Remove automaticamente entradas DKMS NVIDIA órfãs (ex.: 615 após upgrade).
+
+ -- Ricardo Medlo Valus <RicardoValus@gmail.com>  Sat, 07 Nov 2026 14:10:00 -0300
+
 manutencao-pro (1.0.11) unstable; urgency=medium
 
   * Limpa leftovers Vulkan do instalador .run da NVIDIA após upgrade via apt.

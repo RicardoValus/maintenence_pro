@@ -18,7 +18,7 @@ O código fica em [github.com/RicardoValus/maintenence_pro](https://github.com/R
 Na pasta do projeto, depois de gerar o pacote:
 
 ```bash
-sudo apt install ./manutencao-pro_1.0.11_all.deb
+sudo apt install ./manutencao-pro_1.0.12_all.deb
 ```
 
 O aplicativo aparece na busca das Atividades como **Manutenção Pro** e pode ser fixado no dock. A ação **Executar agora** abre a janela e inicia a manutenção.
@@ -100,7 +100,7 @@ sudo apt install meson ninja-build debhelper dh-python
 dpkg-buildpackage -us -uc -b
 ```
 
-O arquivo gerado é `manutencao-pro_1.0.11_all.deb`.
+O arquivo gerado é `manutencao-pro_1.0.12_all.deb`.
 
 ## O que o script faz
 

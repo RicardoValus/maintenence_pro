@@ -394,6 +394,15 @@ report_nvidia_upstream() {
 is_dpkg_owned() {
     dpkg -S "$1" >/dev/null 2>&1
 }
+is_nvidia_driver_version() {
+    local ver="$1" major
+    case "$ver" in
+        [0-9]*.[0-9]*.[0-9]*) ;;
+        *) return 1 ;;
+    esac
+    major=${ver%%.*}
+    [ "$major" -ge 100 ] 2>/dev/null
+}
 clean_nvidia_vulkan_leftovers() {
     local ativo="$1"
     local cleaned=0
@@ -452,12 +461,21 @@ clean_nvidia_vulkan_leftovers() {
             is_dpkg_owned "$path" && continue
             ver=$(printf '%s' "$path" | sed -n 's/.*\.\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p')
             [ -z "$ver" ] && continue
+            is_nvidia_driver_version "$ver" || continue
             [ "$ver" = "$ativo" ] && continue
             echo "⚠️  Removendo lib órfã NVIDIA $ver (ativo $ativo): $path"
             sudo rm -f "$path"
             cleaned=1
         done < <(find /usr/lib/x86_64-linux-gnu /usr/lib/i386-linux-gnu /usr/lib/xorg/modules/extensions \
-            \( -name 'libGLX_nvidia.so.*' -o -name 'libEGL_nvidia.so.*' -o -name 'libnvidia-*.so.*' \
+            \( -name 'libGLX_nvidia.so.*' -o -name 'libEGL_nvidia.so.*' \
+               -o -name 'libnvidia-glcore.so.*' -o -name 'libnvidia-eglcore.so.*' \
+               -o -name 'libnvidia-glvkspirv.so.*' -o -name 'libnvidia-rtcore.so.*' \
+               -o -name 'libnvidia-ml.so.*' -o -name 'libnvidia-tls.so.*' \
+               -o -name 'libnvidia-gpucomp.so.*' -o -name 'libnvidia-ptxjitcompiler.so.*' \
+               -o -name 'libnvidia-nvvm.so.*' -o -name 'libnvidia-allocator.so.*' \
+               -o -name 'libnvidia-cfg.so.*' -o -name 'libnvidia-encode.so.*' \
+               -o -name 'libnvidia-fbc.so.*' -o -name 'libnvidia-opticalflow.so.*' \
+               -o -name 'libnvidia-opencl.so.*' -o -name 'libnvidia-present.so.*' \
                -o -name 'libcuda.so.*' -o -name 'libnvcuvid.so.*' -o -name 'libnvoptix.so.*' \
                -o -name 'libGLESv*_nvidia.so.*' -o -name 'libglxserver_nvidia.so.*' \
                -o -name 'libvdpau_nvidia.so.*' \) 2>/dev/null)
@@ -467,10 +485,7 @@ clean_nvidia_vulkan_leftovers() {
             ver=$(basename "$path")
             ver=${ver#nvidia-}
             [ "$ver" = "$ativo" ] && continue
-            case "$ver" in
-                [0-9]*.[0-9]*.[0-9]*) ;;
-                *) continue ;;
-            esac
+            is_nvidia_driver_version "$ver" || continue
             if [ -d "$path" ] && ! is_dpkg_owned "$path"; then
                 echo "⚠️  Removendo firmware/src órfão NVIDIA $ver: $path"
                 sudo rm -rf "$path"
@@ -503,6 +518,22 @@ clean_nvidia_vulkan_leftovers() {
             echo "✅ Vulkan: uma GPU NVIDIA (sem duplicata de ICD)."
         fi
     fi
+}
+clean_stale_dkms_nvidia() {
+    local line ver cleaned=0
+    while IFS= read -r line; do
+        case "$line" in
+            nvidia/[0-9]*.[0-9]*.[0-9]*:\ broken|nvidia/[0-9]*.[0-9]*.[0-9]*:\ broken*)
+                ver=${line#nvidia/}
+                ver=${ver%%:*}
+                is_nvidia_driver_version "$ver" || continue
+                echo "⚠️  Removendo entrada DKMS órfã nvidia/$ver (source ausente)..."
+                sudo rm -rf "/var/lib/dkms/nvidia/$ver"
+                cleaned=1
+                ;;
+        esac
+    done <<< "$1"
+    [ "$cleaned" -eq 1 ]
 }
 print_item() {
     case "$1" in
@@ -598,7 +629,12 @@ sudo journalctl --vacuum-time=30d
 
 gui_step 7 dkms "Verificando módulos DKMS"
 echo "🎮 Verificando módulos DKMS (NVIDIA)..."
-DKMS_STATUS=$(sudo dkms status 2>/dev/null)
+DKMS_STATUS=$(sudo dkms status 2>&1)
+if echo "$DKMS_STATUS" | grep -qiE "error|broken"; then
+    if clean_stale_dkms_nvidia "$DKMS_STATUS"; then
+        DKMS_STATUS=$(sudo dkms status 2>&1)
+    fi
+fi
 if echo "$DKMS_STATUS" | grep -qiE "error|broken"; then
     DKMS_STATE="broken"
     echo "⚠️  Módulos DKMS com erro. Tente: sudo dkms autoinstall"
